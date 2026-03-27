@@ -1,0 +1,85 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg15
+    container_name: rag-postgres
+    environment:
+      POSTGRES_DB: rag
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: rag-redis
+    ports:
+      - "6379:6379"
+
+  minio:
+    image: minio/minio:latest
+    container_name: rag-minio
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+
+  api:
+    build: .
+    container_name: rag-api
+    command: ["/app/scripts/start-api.sh"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/rag
+      REDIS_URL: redis://redis:6379/0
+      S3_ENDPOINT: http://minio:9000
+      S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://localhost:9000}
+      S3_ACCESS_KEY: minioadmin
+      S3_SECRET_KEY: minioadmin
+      S3_BUCKET: rag-documents
+      EMBEDDING_PROVIDER: gemini
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-gemini-embedding-001}
+      LLM_PROVIDER: gemini
+      LLM_MODEL: ${LLM_MODEL:-gemini-2.0-flash}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_BASE_URL: ${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1beta}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+    depends_on:
+      - postgres
+      - redis
+      - minio
+    ports:
+      - "8000:8000"
+
+  worker:
+    build: .
+    container_name: rag-worker
+    command: ["/app/scripts/start-worker.sh"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/rag
+      REDIS_URL: redis://redis:6379/0
+      S3_ENDPOINT: http://minio:9000
+      S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://localhost:9000}
+      S3_ACCESS_KEY: minioadmin
+      S3_SECRET_KEY: minioadmin
+      S3_BUCKET: rag-documents
+      EMBEDDING_PROVIDER: gemini
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-gemini-embedding-001}
+      LLM_PROVIDER: gemini
+      LLM_MODEL: ${LLM_MODEL:-gemini-2.0-flash}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_BASE_URL: ${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1beta}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+    depends_on:
+      - postgres
+      - redis
+      - minio
+
+volumes:
+  postgres_data:
+  minio_data:
