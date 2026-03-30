@@ -190,12 +190,16 @@ def _parse_pdf(
     for index, page in enumerate(reader.pages, start=1):
         raw = page.extract_text() or ""
         text = raw.strip()
-        if len(text) >= min_text_chars:
+        is_garbage = _is_garbage_text(text)
+
+        if len(text) >= min_text_chars and not is_garbage:
             extracted_pages += 1
             blocks.append(TextBlock(text=text, page=index, section_title=None))
             continue
 
         low_text_pages += 1
+        if is_garbage:
+            logger.info("Garbage text detected on page %d, attempting OCR.", index)
 
         ocr_text = ""
         if ocr_enabled and ocr_client and ocr_pages_attempted < settings.pdf_ocr_max_pages_per_doc:
@@ -404,3 +408,33 @@ def _split_text(text: str, max_chars: int) -> list[str]:
             start += max_chars
 
     return parts
+
+
+def _is_garbage_text(text: str) -> bool:
+    """文字化け（mojibake）や抽出失敗を判定する簡易的な判定ロジック。
+    制御文字や特殊記号の割合が高い場合にTrueを返す。
+    """
+    if not text:
+        return False
+
+    # 制御文字・記号のパターン (U+0000-U+001F, U+007F, U+FFFD, および外字/合成用記号の一部)
+    # また、今回見つかった 'ʹඞͣ΍͍ͬͯͩ͘͞' のようなギリシャ文字/キリル文字等の異常混入も検知対象に含める
+    # 日本語/英語/数字/一般的な記号以外の割合をチェック
+    total = len(text)
+    legit_pattern = re.compile(
+        r"[a-zA-Z0-9\s"
+        r"\u3040-\u309F"  # 平仮名
+        r"\u30A0-\u30FF"  # 片仮名
+        r"\u4E00-\u9FFF"  # 漢字
+        r"\uFF01-\uFF5E"  # 全角記号
+        r"\u0020-\u007E"  # 半角記号
+        r"、。！？「」ー]"
+    )
+    legit_count = len(legit_pattern.findall(text))
+
+    if total == 0:
+        return False
+
+    legit_ratio = legit_count / total
+    # 正常な文字が50%以下の場合はゴミとみなす（経験則）
+    return legit_ratio < 0.5
