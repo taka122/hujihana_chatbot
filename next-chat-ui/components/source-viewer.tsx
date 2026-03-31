@@ -1,13 +1,14 @@
 "use client";
 
-import { ExternalLink, FileText, Loader2 } from "lucide-react";
+import { useEffect, useRef } from "react";
+import { ExternalLink, FileText, Loader2, Video } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { Citation } from "@/lib/api/types";
 import { useSourcePreview } from "@/lib/hooks/use-source-preview";
-import { extractPageNumber, withPageAnchor } from "@/lib/utils";
+import { extractPageNumber, extractTimestamp, withPageAnchor } from "@/lib/utils";
 
 type SourceViewerProps = {
   workspaceId: string;
@@ -18,13 +19,30 @@ function looksLikePdf(url: string): boolean {
   return /\.pdf($|\?)/i.test(url);
 }
 
+function isVideo(mime?: string, ref_type?: string): boolean {
+  return ref_type === "video" || !!mime?.startsWith("video/");
+}
+
 export function SourceViewer({ workspaceId, citation }: SourceViewerProps) {
+  const videoRef = useRef<HTMLVideoElement>(null);
   const previewQuery = useSourcePreview(
     workspaceId,
     citation?.doc_id ?? "",
     citation?.ref ?? "",
     Boolean(citation)
   );
+
+  const timestamp = citation ? extractTimestamp(citation.ref) : null;
+  const isVideoSource = isVideo(citation?.mime_type, citation?.ref_type);
+
+  useEffect(() => {
+    if (isVideoSource && timestamp !== null && videoRef.current) {
+      videoRef.current.currentTime = timestamp;
+      videoRef.current.play().catch(() => {
+        /* ignore autoplay block */
+      });
+    }
+  }, [isVideoSource, timestamp, citation?.doc_id]);
 
   if (!citation) {
     return (
@@ -87,29 +105,44 @@ export function SourceViewer({ workspaceId, citation }: SourceViewerProps) {
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <p className="text-xs text-slate-500">
-                    {page ? `ページジャンプ: ${page}` : "参照位置のページ情報なし"}
+                    {isVideoSource
+                      ? `タイムスタンプ: ${citation.ref}`
+                      : page
+                      ? `ページジャンプ: ${page}`
+                      : "参照位置情報なし"}
                   </p>
                   <a
                     href={previewUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex h-9 items-center gap-1 rounded-md border border-slate-200 px-3 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                    className="inline-flex h-9 items-center gap-1 rounded-md bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-700 shadow-sm transition-all"
                   >
-                    別タブで開く
-                    <ExternalLink className="h-3 w-3" />
+                    <ExternalLink className="h-4 w-4" />
+                    大画面で開く
                   </a>
                 </div>
-                <iframe
-                  src={previewUrl}
-                  title="source-preview"
-                  className="h-[56vh] w-full rounded-md border border-slate-200 bg-white"
-                />
+                {isVideoSource ? (
+                  <div className="relative aspect-video w-full overflow-hidden rounded-md border border-slate-200 bg-black">
+                    <video
+                      ref={videoRef}
+                      src={previewUrl}
+                      controls
+                      className="h-full w-full"
+                    />
+                  </div>
+                ) : (
+                  <iframe
+                    src={previewUrl}
+                    title="source-preview"
+                    className="h-[56vh] w-full rounded-md border border-slate-200 bg-white"
+                  />
+                )}
               </div>
             )}
 
             {!previewQuery.isLoading && !previewUrl && (
               <div className="flex h-[56vh] flex-col items-center justify-center gap-2 rounded-md border border-dashed border-slate-300 bg-slate-50 text-sm text-slate-600">
-                <FileText className="h-5 w-5" />
+                {isVideoSource ? <Video className="h-5 w-5" /> : <FileText className="h-5 w-5" />}
                 プレビューURLがないためスニペット表示のみ利用できます。
               </div>
             )}
