@@ -41,6 +41,7 @@ def list_documents(wid: uuid.UUID, db: Session = Depends(get_db)) -> list[Docume
 async def upload_document(
     wid: uuid.UUID,
     request: Request,
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ) -> UploadResponse:
@@ -77,14 +78,15 @@ async def upload_document(
 
     try:
         gemini_api_key = _extract_api_key_header(request, "x-gemini-api-key")
-        enqueue_ingestion(
+        background_tasks.add_task(
+            process_document_ingestion,
             str(document.id),
             gemini_api_key=gemini_api_key,
         )
     except Exception as exc:  # noqa: BLE001
-        logger.exception("Failed to enqueue ingestion job")
+        logger.exception("Failed to start background ingestion task")
         document.status = DocumentStatus.failed
-        document.fail_reason = f"enqueue_failed: {exc}"
+        document.fail_reason = f"background_task_failed: {exc}"
         db.add(document)
         db.commit()
 
