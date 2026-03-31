@@ -27,11 +27,12 @@ export type Doc = {
 export type Citation = {
   doc_id: string;
   file_name: string;
-  ref_type: "page" | "slide" | "sheet";
+  ref_type: "page" | "slide" | "sheet" | "video";
   ref: string;
   snippet: string;
   score: number | null;
   chunk_id?: string;
+  mime_type?: string;
 };
 
 export type ChatAnswer = {

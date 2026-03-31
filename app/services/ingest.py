@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import logging
 import re
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -65,6 +66,14 @@ def parse_document(
 
     if ext == ".pdf" or normalized_mime == "application/pdf":
         return _parse_pdf(
+            data,
+            gemini_api_key_override=gemini_api_key_override,
+        )
+
+    if normalized_mime.startswith("video/") or ext in {".mp4", ".mov", ".avi", ".mkv"}:
+        return _parse_video(
+            file_name,
+            normalized_mime or "video/mp4",
             data,
             gemini_api_key_override=gemini_api_key_override,
         )
@@ -233,6 +242,22 @@ def _parse_pdf(
 
     if page_count > 0 and low_text_pages / page_count >= settings.image_only_pdf_ratio_threshold:
         tags.append("IMAGE_ONLY_PDF")
+    
+    # NEW: If we have garbage text but NO images were found for local OCR, or if the user wants high quality:
+    # We fallback to Gemini's native PDF parsing.
+    garbage_detected = any(_is_garbage_text(b.text) for b in blocks)
+    if garbage_detected and ocr_enabled and ocr_client:
+        logger.info("Garbage text detected and local OCR was insufficient. Falling back to Gemini native PDF parsing.")
+        gemini_text = _extract_pdf_text_via_gemini_file_api(data, ocr_client, settings.pdf_ocr_model)
+        if gemini_text:
+            # Replace blocks with gemini extracted text
+            blocks = []
+            # Gemini might return pages as "--- Page 1 ---" etc if prompted, but for now we do simple split
+            for part in _split_text(gemini_text, 2000):
+                 blocks.append(TextBlock(text=part, page=None, section_title=None))
+            tags.append("GEMINI_NATIVE_PDF_PARSED")
+            extracted_pages = page_count # assume success
+
     if short_text_pages:
         tags.append("SHORT_TEXT_INCLUDED")
     if ocr_used_pages:
@@ -246,6 +271,87 @@ def _parse_pdf(
         failed_pages=failed_pages,
         ocr_used_pages=ocr_used_pages,
         tags=tags,
+        blocks=blocks,
+    )
+
+
+def _parse_video(
+    file_name: str,
+    mime_type: str,
+    data: bytes,
+    gemini_api_key_override: str | None = None,
+) -> ParseResult:
+    import time
+
+    settings = get_settings()
+    api_key = _normalize_api_key(gemini_api_key_override) or settings.gemini_api_key
+    if not api_key:
+        raise IngestionError("Gemini API key is required for video ingestion")
+
+    client = GeminiClient(api_key=api_key, base_url=settings.gemini_base_url)
+
+    # 1. Upload to Gemini File API
+    logger.info("Uploading video to Gemini File API: %s", file_name)
+    file_info = client.upload_file(data, mime_type, display_name=file_name)
+    file_name_api = file_info["name"]
+    file_uri = file_info["uri"]
+
+    # 2. Wait for processing
+    logger.info("Waiting for video processing: %s", file_name_api)
+    max_retries = 30
+    for _ in range(max_retries):
+        status = client.get_file_status(file_name_api)
+        state = status.get("state")
+        if state == "ACTIVE":
+            break
+        if state == "FAILED":
+            raise IngestionError("Gemini video processing failed")
+        time.sleep(2)
+    else:
+        raise IngestionError("Gemini video processing timed out")
+
+    # 3. Generate timestamped summary
+    logger.info("Generating timestamped summary for %s", file_name)
+    system_prompt = (
+        "あなたは動画解析アシスタントです。提供された動画の内容を詳しく解析し、"
+        "重要な場面ごとにその内容を要約してください。\n"
+        "出力形式は必ず [MM:SS] 要約テキスト の形式にしてください。\n"
+        "例: [00:15] 導入部分。講師が登場し、本日のアジェンダを説明する。"
+    )
+    user_prompt = "この動画の内容を時系列順に詳しく要約してください。"
+
+    raw_summary = client.generate_content(
+        model=settings.pdf_ocr_model,  # Reusing the OCR model setting (e.g. gemini-2.0-flash)
+        system_instruction=system_prompt,
+        user_prompt=user_prompt,
+        file_uri=file_uri,
+        mime_type=mime_type,
+    )
+
+    # 4. Parse timestamps
+    blocks: list[TextBlock] = []
+    # Regex to match [MM:SS] or [HH:MM:SS]
+    pattern = re.compile(r"\[(\d{1,2}:)?(\d{1,2}):(\d{2})\]\s*(.*)")
+    
+    for line in raw_summary.splitlines():
+        match = pattern.search(line.strip())
+        if match:
+            h, m, s, text = match.groups()
+            seconds = int(m) * 60 + int(s)
+            if h:
+                seconds += int(h.rstrip(":")) * 3600
+            blocks.append(TextBlock(text=text.strip(), page=seconds, section_title=None))
+    
+    if not blocks:
+        # Fallback if parsing failed
+        blocks.append(TextBlock(text=raw_summary, page=0, section_title=None))
+
+    return ParseResult(
+        page_count=None,
+        extracted_pages=1,
+        failed_pages=[],
+        ocr_used_pages=[],
+        tags=["VIDEO_SOURCE"],
         blocks=blocks,
     )
 
@@ -417,8 +523,6 @@ def _is_garbage_text(text: str) -> bool:
     if not text:
         return False
 
-    # 制御文字・記号のパターン (U+0000-U+001F, U+007F, U+FFFD, および外字/合成用記号の一部)
-    # また、今回見つかった 'ʹඞͣ΍͍ͬͯͩ͘͞' のようなギリシャ文字/キリル文字等の異常混入も検知対象に含める
     # 日本語/英語/数字/一般的な記号以外の割合をチェック
     total = len(text)
     legit_pattern = re.compile(
@@ -438,3 +542,40 @@ def _is_garbage_text(text: str) -> bool:
     legit_ratio = legit_count / total
     # 正常な文字が50%以下の場合はゴミとみなす（経験則）
     return legit_ratio < 0.5
+
+
+def _extract_pdf_text_via_gemini_file_api(data: bytes, client: GeminiClient, model: str) -> str:
+    """PDF自体をGemini File APIにアップロードして内容を抽出する"""
+    try:
+        f_info = client.upload_file(data, "application/pdf", "temp_ingest_pdf.pdf")
+        f_name = f_info["name"]
+
+        # Wait for processing
+        for _ in range(10):
+            status = client.get_file_status(f_name)
+            state = status.get("state")
+            if state == "ACTIVE":
+                break
+            if state == "FAILED":
+                logger.error("Gemini PDF processing failed: %s", status)
+                return ""
+            time.sleep(2)
+        else:
+            logger.warning("Gemini PDF processing timed out.")
+            return ""
+
+        text = client.generate_content(
+            model=model,
+            system_instruction="あなたは優秀なドキュメント解析アシスタントです。",
+            user_prompt=(
+                "このPDFファイルの内容をすべてテキストとして抽出してください。"
+                "表や図の中に含まれる文字も漏らさず抽出してください。"
+                "推測や要約はせず、書いてある内容だけを正確に返してください。"
+            ),
+            file_uri=status.get("uri"),
+            mime_type="application/pdf",
+        )
+        return text
+    except Exception as e:
+        logger.error("Error in Gemini native PDF parsing: %s", e)
+        return ""

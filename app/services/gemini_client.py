@@ -54,10 +54,21 @@ class GeminiClient:
             )
         return [[float(v) for v in item.get("values", [])] for item in embeddings]
 
-    def generate_content(self, model: str, system_instruction: str, user_prompt: str) -> str:
+    def generate_content(
+        self,
+        model: str,
+        system_instruction: str,
+        user_prompt: str,
+        file_uri: str | None = None,
+        mime_type: str | None = None,
+    ) -> str:
+        parts: list[dict[str, Any]] = [{"text": user_prompt}]
+        if file_uri and mime_type:
+            parts.insert(0, {"file_data": {"mime_type": mime_type, "file_uri": file_uri}})
+
         payload = {
             "system_instruction": {"parts": [{"text": system_instruction}]},
-            "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
+            "contents": [{"role": "user", "parts": parts}],
             "generationConfig": {"temperature": 0.0},
         }
         data = self._post(f"models/{model}:generateContent", payload)
@@ -102,12 +113,75 @@ class GeminiClient:
                     return text.strip()
         raise GeminiApiError("Gemini OCR returned no text candidates")
 
-    def _post(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
-        url = f"{self._base_url}/{path}"
-        request = urllib.request.Request(
+    def upload_file(self, content: bytes, mime_type: str, display_name: str) -> dict[str, Any]:
+        """Uploads a file to Gemini File API (v1beta)."""
+        url = f"https://generativelanguage.googleapis.com/upload/v1beta/files?key={self._api_key}"
+        
+        # Simple upload format for simplicity, though resumable is recommended for large files.
+        # For this PoC, we use the non-resumable simple upload if possible.
+        # If it needs metadata, we should use resumable. 
+        # Here we do a two-step resumable-like approach or just provide metadata in headers.
+        
+        metadata = {"file": {"display_name": display_name}}
+        body = json.dumps(metadata).encode("utf-8")
+        
+        # 1. Initiate upload
+        init_request = urllib.request.Request(
             url=url,
             method="POST",
-            data=json.dumps(payload).encode("utf-8"),
+            data=body,
+            headers={
+                "X-Goog-Upload-Protocol": "resumable",
+                "X-Goog-Upload-Command": "start",
+                "X-Goog-Upload-Header-Content-Length": str(len(content)),
+                "X-Goog-Upload-Header-Content-Type": mime_type,
+                "Content-Type": "application/json",
+            },
+        )
+        
+        try:
+            with urllib.request.urlopen(init_request) as resp:
+                upload_url = resp.headers.get("X-Goog-Upload-URL")
+        except urllib.error.HTTPError as exc:
+            body = exc.read().decode("utf-8", errors="ignore")
+            raise GeminiApiError(f"Gemini File Init Error {exc.code}: {body}") from exc
+
+        if not upload_url:
+            raise GeminiApiError("Failed to get upload URL from Gemini")
+
+        # 2. Upload actual data
+        data_request = urllib.request.Request(
+            url=upload_url,
+            method="POST",
+            data=content,
+            headers={
+                "X-Goog-Upload-Protocol": "resumable",
+                "X-Goog-Upload-Command": "upload, finalize",
+                "X-Goog-Upload-Offset": "0",
+                "Content-Length": str(len(content)),
+            },
+        )
+        
+        try:
+            with urllib.request.urlopen(data_request) as resp:
+                raw = resp.read().decode("utf-8")
+                return json.loads(raw).get("file", {})
+        except urllib.error.HTTPError as exc:
+            body = exc.read().decode("utf-8", errors="ignore")
+            raise GeminiApiError(f"Gemini File Upload Error {exc.code}: {body}") from exc
+
+    def get_file_status(self, name: str) -> dict[str, Any]:
+        """Gets file status (e.g. processing state). name format is 'files/...'"""
+        data = self._post(name, payload={}, method="GET")
+        return data
+
+    def _post(self, path: str, payload: dict[str, Any], method: str = "POST") -> dict[str, Any]:
+        url = f"{self._base_url}/{path}"
+        data_bytes = json.dumps(payload).encode("utf-8") if payload else None
+        request = urllib.request.Request(
+            url=url,
+            method=method,
+            data=data_bytes,
             headers={
                 "Content-Type": "application/json",
                 "x-goog-api-key": self._api_key,

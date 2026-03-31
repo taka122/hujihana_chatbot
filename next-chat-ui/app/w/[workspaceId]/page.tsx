@@ -25,8 +25,8 @@ const RESIZE_HANDLE_WIDTH = 12;
 const DOC_PANEL_MIN_WIDTH = 240;
 const CHAT_PANEL_MIN_WIDTH = 300;
 const SOURCE_PANEL_MIN_WIDTH = 280;
-const DEFAULT_DOC_PANEL_WIDTH = 280;
-const DEFAULT_SOURCE_PANEL_WIDTH = 340;
+const DEFAULT_DOC_PANEL_WIDTH = 260;
+const DEFAULT_SOURCE_PANEL_WIDTH = 550;
 
 const clamp = (value: number, min: number, max: number) => {
   const upper = Math.max(min, max);
@@ -155,8 +155,8 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
     <main className="mx-auto flex min-h-screen w-full max-w-[1800px] flex-col gap-4 p-4 lg:p-6">
       <header className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white/90 p-3 shadow-sm backdrop-blur">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Universal RAG PoC</p>
-          <h1 className="text-lg font-semibold text-slate-900">資料投入から根拠確認まで</h1>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">藤花歯科クリニック専用Chatbot</p>
+          <h1 className="text-lg font-semibold text-slate-900">AI歯科助手ガイダンス</h1>
         </div>
         <div className="flex items-center gap-2">
           <WorkspaceSelector currentWorkspaceId={workspaceId} />

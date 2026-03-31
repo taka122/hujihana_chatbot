@@ -39,3 +39,13 @@ export function withPageAnchor(url: string, page: number | null): string {
   }
   return `${url}#page=${page}`;
 }
+
+export function extractTimestamp(ref: string): number | null {
+  const match = ref.match(/(\d{1,2}):(\d{2})/);
+  if (match) {
+    const mins = parseInt(match[1], 10);
+    const secs = parseInt(match[2], 10);
+    return mins * 60 + secs;
+  }
+  return null;
+}
