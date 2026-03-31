@@ -19,31 +19,34 @@ class GeminiClient:
         self._api_key = api_key
         self._base_url = base_url.rstrip("/")
 
-    def embed_query(self, model: str, query: str) -> list[float]:
-        payload = {
+    def embed_query(self, model: str, query: str, output_dimensionality: int | None = None) -> list[float]:
+        payload: dict[str, Any] = {
             "model": f"models/{model}",
             "taskType": "RETRIEVAL_QUERY",
             "content": {"parts": [{"text": query}]},
         }
+        if output_dimensionality is not None:
+            payload["outputDimensionality"] = output_dimensionality
         data = self._post(f"models/{model}:embedContent", payload)
         vector = data.get("embedding", {}).get("values", [])
         if not vector:
             raise GeminiApiError("Gemini query embedding is empty")
         return [float(v) for v in vector]
 
-    def embed_documents(self, model: str, texts: list[str]) -> list[list[float]]:
+    def embed_documents(self, model: str, texts: list[str], output_dimensionality: int | None = None) -> list[list[float]]:
         if not texts:
             return []
         requests: list[dict[str, Any]] = []
         for index, text in enumerate(texts):
-            requests.append(
-                {
-                    "model": f"models/{model}",
-                    "taskType": "RETRIEVAL_DOCUMENT",
-                    "title": f"chunk-{index}",
-                    "content": {"parts": [{"text": text}]},
-                }
-            )
+            req: dict[str, Any] = {
+                "model": f"models/{model}",
+                "taskType": "RETRIEVAL_DOCUMENT",
+                "title": f"chunk-{index}",
+                "content": {"parts": [{"text": text}]},
+            }
+            if output_dimensionality is not None:
+                req["outputDimensionality"] = output_dimensionality
+            requests.append(req)
 
         payload = {"requests": requests}
         data = self._post(f"models/{model}:batchEmbedContents", payload)

@@ -35,9 +35,11 @@ class Settings(BaseSettings):
 
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
 
-    vector_top_k: int = 30
-    keyword_top_k: int = 30
-    answer_context_chunks: int = 8
+    vector_top_k: int = 10
+    keyword_top_k: int = 10
+    answer_context_chunks: int = 5
+    answer_context_text_max_chars: int = 1000
+    llm_retry_attempts: int = 2
     retrieval_score_threshold: float = 0.25
 
     chunk_size_chars: int = 4200
@@ -46,7 +48,7 @@ class Settings(BaseSettings):
     image_only_pdf_ratio_threshold: float = 0.5
     pdf_ocr_enabled: bool = True
     pdf_ocr_model: str = "gemini-2.0-flash"
-    pdf_ocr_max_pages_per_doc: int = 20
+    pdf_ocr_max_pages_per_doc: int = 5
 
     @property
     def cors_origins_list(self) -> List[str]:

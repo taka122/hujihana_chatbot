@@ -129,6 +129,54 @@ curl -X POST "http://localhost:8000/api/workspaces/<wid>/chat/query" \
   -d '{"query":"有給休暇の繰越上限は？"}'
 ```
 
+## トラブルシューティング
+
+### PDFを開こうとするとエラーになる（DNS_PROBE_FINISHED_NXDOMAIN / 接続できない）
+
+**原因**: PDFプレビューはMinIOの presigned URL をブラウザで直接開く仕組みです。
+`S3_PUBLIC_ENDPOINT` が設定されていないとAPIが `http://minio:9000/...` という内部ホスト名のURLを返し、ブラウザから到達できません。
+
+**修正手順**:
+1. `.env` に以下を追加（または `.env.example` を `.env` にコピーして編集）:
+   ```
+   S3_PUBLIC_ENDPOINT=http://localhost:9000
+   ```
+2. コンテナを再起動:
+   ```bash
+   docker compose up -d --build api
+   ```
+
+docker-compose.yml ではデフォルトで `S3_PUBLIC_ENDPOINT=http://localhost:9000` が設定されています。
+直接 Python で起動している場合は `.env` への追記が必要です。
+
+### PDFアップロード後に "Storage unavailable" エラーが出る
+
+**原因**: MinIO が起動していないか、`S3_BUCKET` が存在しない可能性があります。
+
+**確認手順**:
+1. MinIO が起動しているか確認: `docker compose ps`
+2. MinIO Console (`http://localhost:9001`) でバケット `rag-documents` の存在を確認
+3. バケットがない場合は自動作成されますが、MinIO への接続情報（`S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`）を確認してください
+
+### チャット応答が遅い / Gemini API コストを抑えたい
+
+以下の環境変数で主要なコストドライバーを調整できます:
+
+| 環境変数 | デフォルト | 説明 |
+|---|---|---|
+| `PDF_OCR_MAX_PAGES_PER_DOC` | `5` | OCR（Gemini Vision）を呼ぶ最大ページ数。値を下げるとコスト削減 |
+| `VECTOR_TOP_K` | `10` | ベクトル検索で取得するチャンク数 |
+| `KEYWORD_TOP_K` | `10` | キーワード検索で取得するチャンク数 |
+| `ANSWER_CONTEXT_CHUNKS` | `5` | LLMに渡すチャンク数（小さいほど安く速い） |
+
+OCR を完全に無効化したい場合は `PDF_OCR_ENABLED=false` を設定してください。
+
+### ブラウザのポップアップブロックで「内容を開く」が動かない
+
+ブラウザの設定で `http://localhost:3000` のポップアップを許可してください。
+
+---
+
 ## 実装上の注意
 - PDFでテキスト抽出できないページは、`PDF_OCR_ENABLED=true` かつ Gemini APIキーがある場合にOCRを試行します。成功したページは `ocr_used_pages` に記録されます。
 - OCRで救済できなかったページは `failed_pages` に `image_only_or_no_text` として記録されます。
