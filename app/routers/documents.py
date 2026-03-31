@@ -5,7 +5,7 @@ import mimetypes
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, Response, UploadFile, status
 from sqlalchemy import Select, desc, select
 from sqlalchemy.orm import Session
 
@@ -18,7 +18,7 @@ from app.schemas import (
     PresignedUrlResponse,
     UploadResponse,
 )
-from app.services.queue import enqueue_ingestion
+from app.services.ingest import process_document_ingestion
 from app.services.storage import StorageService
 
 logger = logging.getLogger(__name__)

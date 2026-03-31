@@ -42,10 +42,11 @@ export function SourceViewer({ workspaceId, citation }: SourceViewerProps) {
   }
 
   const page = extractPageNumber(citation.ref);
+  const rawUrl = citation.url || previewQuery.data?.url;
   const previewUrl =
-    previewQuery.data?.url && looksLikePdf(previewQuery.data.url)
-      ? withPageAnchor(previewQuery.data.url, page)
-      : previewQuery.data?.url;
+    rawUrl && looksLikePdf(rawUrl)
+      ? withPageAnchor(rawUrl, page)
+      : rawUrl;
 
   const previewSnippet = citation.snippet || previewQuery.data?.snippet || previewQuery.data?.text || "";
 

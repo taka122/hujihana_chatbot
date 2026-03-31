@@ -24,6 +24,7 @@ class RetrievedChunk:
     section_title: str | None
     score: float
     raw_score: float
+    storage_key: str
 
 
 def hybrid_retrieve(
@@ -45,12 +46,12 @@ def hybrid_retrieve(
 
     merged: dict[uuid.UUID, RetrievedChunk] = {}
 
-    for chunk, raw_score, file_name in vector_rows:
+    for chunk, raw_score, file_name, storage_key in vector_rows:
         cid = chunk.id
         score = vec_norm.get(cid, float(raw_score or 0.0))
-        merged[cid] = _to_retrieved(chunk, file_name, score, raw_score=float(raw_score or 0.0))
+        merged[cid] = _to_retrieved(chunk, file_name, storage_key, score, raw_score=float(raw_score or 0.0))
 
-    for chunk, raw_score, file_name in keyword_rows:
+    for chunk, raw_score, file_name, storage_key in keyword_rows:
         cid = chunk.id
         score = kw_norm.get(cid, float(raw_score or 0.0))
         raw_kw_score = min(max(float(raw_score or 0.0), 0.0), 1.0)
@@ -58,7 +59,7 @@ def hybrid_retrieve(
             merged[cid].score = max(merged[cid].score, score)
             merged[cid].raw_score = max(merged[cid].raw_score, raw_kw_score)
         else:
-            merged[cid] = _to_retrieved(chunk, file_name, score, raw_score=raw_kw_score)
+            merged[cid] = _to_retrieved(chunk, file_name, storage_key, score, raw_score=raw_kw_score)
 
     items = list(merged.values())
     items.sort(key=lambda item: item.score, reverse=True)
@@ -74,8 +75,8 @@ def _run_vector_search(
     distance = Chunk.embedding.cosine_distance(query_vector)
     score_expr = (1 - distance).label("score")
 
-    stmt: Select[tuple[Chunk, float, str]] = (
-        select(Chunk, score_expr, Document.file_name)
+    stmt: Select[tuple[Chunk, float, str, str]] = (
+        select(Chunk, score_expr, Document.file_name, Document.storage_key)
         .join(Document, Document.id == Chunk.document_id)
         .where(Chunk.workspace_id == workspace_id)
         .where(Document.status == DocumentStatus.ready)
@@ -94,8 +95,8 @@ def _run_keyword_search(
     ts_query = func.plainto_tsquery("simple", query)
     rank = func.ts_rank_cd(Chunk.fts, ts_query).label("score")
 
-    stmt: Select[tuple[Chunk, float, str]] = (
-        select(Chunk, rank, Document.file_name)
+    stmt: Select[tuple[Chunk, float, str, str]] = (
+        select(Chunk, rank, Document.file_name, Document.storage_key)
         .join(Document, Document.id == Chunk.document_id)
         .where(Chunk.workspace_id == workspace_id)
         .where(Document.status == DocumentStatus.ready)
@@ -117,7 +118,7 @@ def _normalize_scores(raw: dict[uuid.UUID, float]) -> dict[uuid.UUID, float]:
     return {key: (score - min_score) / (max_score - min_score) for key, score in raw.items()}
 
 
-def _to_retrieved(chunk: Chunk, file_name: str, score: float, raw_score: float) -> RetrievedChunk:
+def _to_retrieved(chunk: Chunk, file_name: str, storage_key: str, score: float, raw_score: float) -> RetrievedChunk:
     if chunk.page_start is not None:
         ref_type = "page"
         if chunk.page_end and chunk.page_end != chunk.page_start:
@@ -144,4 +145,5 @@ def _to_retrieved(chunk: Chunk, file_name: str, score: float, raw_score: float) 
         section_title=chunk.section_title,
         score=score,
         raw_score=raw_score,
+        storage_key=storage_key,
     )

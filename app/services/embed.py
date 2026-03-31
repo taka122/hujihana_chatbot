@@ -34,7 +34,8 @@ class EmbeddingService:
         if not texts:
             return []
         try:
-            vectors = self._gemini_client.embed_documents(self._model, texts)
+            # Note: dimension=self._dim works for text-embedding-004 models and later
+            vectors = self._gemini_client.embed_documents(self._model, texts, dimension=self._dim)
         except GeminiApiError as exc:
             logger.exception("Gemini embedding failed")
             raise EmbeddingError(str(exc)) from exc
@@ -42,7 +43,9 @@ class EmbeddingService:
 
     def embed_query(self, query: str) -> List[float]:
         try:
-            return self._fit_dimension(self._gemini_client.embed_query(self._model, query))
+            return self._fit_dimension(
+                self._gemini_client.embed_query(self._model, query, dimension=self._dim)
+            )
         except GeminiApiError as exc:
             logger.exception("Gemini query embedding failed")
             raise EmbeddingError(str(exc)) from exc

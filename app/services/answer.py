@@ -84,12 +84,12 @@ class AnswerService:
         )
 
         system_prompt = (
-            "あなたはRAG回答器です。\n"
-            "- ソースに書いていないことを断定しない\n"
-            "- 引用のない断定は禁止\n"
-            "- citationsには必ずchunk_idを入れる\n"
-            "- JSONのみを返す\n"
-            "- JSON以外の説明文を付けない"
+            "あなたは優秀なRAG（検索拡張生成）回答器です。\n"
+            "- 与えられたソース（contexts）のみに基づいて回答してください。\n"
+            "- ソースにない情報を勝手に補完したり、断定したりしないでください。\n"
+            "- ユーザーから「要約して」と依頼された場合は、複数のソースを統合し、重要ポイントを整理して分かりやすく解説してください。\n"
+            "- 回答の各主張には、必ず根拠となる [chunk_id] を紐付けてください（citationsリストに含める）。\n"
+            "- JSON形式のみで出力し、前後の説明文は一切不要です。"
         )
         user_prompt = (
             f"query:\n{query}\n\n"
@@ -169,6 +169,7 @@ class AnswerService:
             "snippet": item.snippet,
             "score": item.score,
             "chunk_id": item.chunk_id,
+            "storage_key": item.storage_key,
         }
 
 

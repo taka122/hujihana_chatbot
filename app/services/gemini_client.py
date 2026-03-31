@@ -19,31 +19,35 @@ class GeminiClient:
         self._api_key = api_key
         self._base_url = base_url.rstrip("/")
 
-    def embed_query(self, model: str, query: str) -> list[float]:
+    def embed_query(self, model: str, query: str, dimension: int | None = None) -> list[float]:
         payload = {
             "model": f"models/{model}",
             "taskType": "RETRIEVAL_QUERY",
             "content": {"parts": [{"text": query}]},
         }
+        if dimension:
+            payload["outputDimensionality"] = dimension
+
         data = self._post(f"models/{model}:embedContent", payload)
         vector = data.get("embedding", {}).get("values", [])
         if not vector:
             raise GeminiApiError("Gemini query embedding is empty")
         return [float(v) for v in vector]
 
-    def embed_documents(self, model: str, texts: list[str]) -> list[list[float]]:
+    def embed_documents(self, model: str, texts: list[str], dimension: int | None = None) -> list[list[float]]:
         if not texts:
             return []
         requests: list[dict[str, Any]] = []
         for index, text in enumerate(texts):
-            requests.append(
-                {
-                    "model": f"models/{model}",
-                    "taskType": "RETRIEVAL_DOCUMENT",
-                    "title": f"chunk-{index}",
-                    "content": {"parts": [{"text": text}]},
-                }
-            )
+            req = {
+                "model": f"models/{model}",
+                "taskType": "RETRIEVAL_DOCUMENT",
+                "title": f"chunk-{index}",
+                "content": {"parts": [{"text": text}]},
+            }
+            if dimension:
+                req["outputDimensionality"] = dimension
+            requests.append(req)
 
         payload = {"requests": requests}
         data = self._post(f"models/{model}:batchEmbedContents", payload)
@@ -101,6 +105,48 @@ class GeminiClient:
                 if text and text.strip():
                     return text.strip()
         raise GeminiApiError("Gemini OCR returned no text candidates")
+
+    def extract_text_from_video(
+        self,
+        model: str,
+        mime_type: str,
+        data: bytes,
+        prompt: str = (
+            "この動画の内容（音声およびキーとなる映像）の文字起こしをしてください。"
+            "発言内容を詳細なテキスト形式で出力し、重要な視覚情報（字幕や特定のシーンの説明）があれば追記してください。"
+            "要約ではなく、可能な限り忠実な文字起こしを目指してください。"
+        ),
+    ) -> str:
+        if not data:
+            return ""
+
+        payload = {
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [
+                        {"text": prompt},
+                        {
+                            "inline_data": {
+                                "mime_type": mime_type,
+                                "data": base64.b64encode(data).decode("ascii"),
+                            }
+                        },
+                    ],
+                }
+            ],
+            "generationConfig": {"temperature": 0.0},
+        }
+
+        # note: Use a longer timeout for video processing as it takes more time
+        data_resp = self._post(f"models/{model}:generateContent", payload)
+        for candidate in data_resp.get("candidates", []):
+            content = candidate.get("content", {})
+            for part in content.get("parts", []):
+                text = part.get("text")
+                if text and text.strip():
+                    return text.strip()
+        raise GeminiApiError("Gemini video extraction returned no text candidates")
 
     def _post(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
         url = f"{self._base_url}/{path}"

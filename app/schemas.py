@@ -93,6 +93,7 @@ class ChatCitation(BaseModel):
     snippet: str
     score: float | None
     chunk_id: uuid.UUID
+    url: str | None = None
 
 
 class ChatQueryResponse(BaseModel):

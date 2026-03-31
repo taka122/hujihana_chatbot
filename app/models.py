@@ -92,7 +92,7 @@ class Chunk(Base):
     section_title: Mapped[str | None] = mapped_column(Text)
     snippet: Mapped[str | None] = mapped_column(Text)
     fts: Mapped[str] = mapped_column(TSVECTOR, nullable=False)
-    embedding: Mapped[list[float]] = mapped_column(Vector(1536), nullable=False)
+    embedding: Mapped[list[float]] = mapped_column(Vector(768), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     document: Mapped[Document] = relationship(back_populates="chunks")

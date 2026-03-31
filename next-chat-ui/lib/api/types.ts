@@ -31,7 +31,8 @@ export type Citation = {
   ref: string;
   snippet: string;
   score: number | null;
-  chunk_id?: string;
+  chunk_id: string;
+  url?: string;
 };
 
 export type ChatAnswer = {

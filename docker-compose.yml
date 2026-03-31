@@ -35,22 +35,15 @@ services:
       S3_ACCESS_KEY: minioadmin
       S3_SECRET_KEY: minioadmin
       S3_BUCKET: rag-documents
-      EMBEDDING_PROVIDER: gemini
-      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-gemini-embedding-001}
-      LLM_PROVIDER: gemini
-      LLM_MODEL: ${LLM_MODEL:-gemini-2.0-flash}
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      GEMINI_BASE_URL: ${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1beta}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+      GEMINI_API_KEY: AIzaSyCsKMuyScPwrMpAEht8BerG5qrRVlR17pw
+      EMBEDDING_MODEL: embedding-001
+      LLM_MODEL: gemini-2.0-flash
+      PDF_OCR_ENABLED: "true"
     depends_on:
       - postgres
       - minio
     ports:
       - "8000:8000"
-
-volumes:
-  postgres_data:
-  minio_data:
 
 volumes:
   postgres_data:

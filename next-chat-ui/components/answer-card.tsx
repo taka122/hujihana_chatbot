@@ -41,18 +41,35 @@ export function AnswerCard({ response, onCitationClick }: AnswerCardProps) {
           {response.citations.length > 0 ? (
             <div className="flex flex-wrap gap-2">
               {response.citations.map((citation, index) => (
-                <Button
-                  key={`${citation.doc_id}-${citation.ref}-${index}`}
-                  variant="outline"
-                  size="sm"
-                  onClick={() => onCitationClick(citation)}
-                  className="max-w-full gap-1 truncate"
-                >
-                  <span className="truncate text-xs">
-                    {citation.file_name} {citation.ref}
-                  </span>
-                  <ExternalLink className="h-3 w-3 shrink-0" />
-                </Button>
+                <div key={`${citation.doc_id}-${citation.ref}-${index}`} className="flex items-center gap-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onCitationClick(citation)}
+                    className="max-w-[180px] truncate rounded-r-none border-r-0"
+                  >
+                    <span className="truncate text-xs">
+                      {citation.file_name} {citation.ref}
+                    </span>
+                  </Button>
+                  {citation.url ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      asChild
+                      className="rounded-l-none px-2 text-blue-600 hover:text-blue-700"
+                      title="ファイルを別タブで開く"
+                    >
+                      <a href={citation.url} target="_blank" rel="noreferrer">
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    </Button>
+                  ) : (
+                    <Button variant="outline" size="sm" disabled className="rounded-l-none px-2 opacity-50">
+                      <ExternalLink className="h-3 w-3" />
+                    </Button>
+                  )}
+                </div>
               ))}
             </div>
           ) : (

@@ -3,15 +3,21 @@ from __future__ import annotations
 import io
 import logging
 import re
+import uuid
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from docx import Document as DocxDocument
 from pypdf import PdfReader
+from sqlalchemy import text as sa_text
 
 from app.config import get_settings
+from app.db import SessionLocal
+from app.models import Chunk, Document, DocumentStatus, IngestionRun
 from app.services.gemini_client import GeminiApiError, GeminiClient
+from app.services.storage import StorageService
 from app.services.text_decode import decode_text_bytes, extract_charset_from_mime
 
 logger = logging.getLogger(__name__)
@@ -88,6 +94,14 @@ def parse_document(
         raise UnsupportedDocumentError("XLS/XLSX is not supported in MVP", tags=["UNSUPPORTED_XLS", "TABLE_EXTRACT_FAILED"])
     if ext in {".png", ".jpg", ".jpeg", ".webp", ".tif", ".tiff"}:
         raise UnsupportedDocumentError("Image file requires OCR (not enabled in MVP)", tags=["OCR_REQUIRED"])
+
+    if ext in {".mp4", ".mov", ".avi", ".mkv"} or normalized_mime.startswith("video/"):
+        return _parse_video(
+            file_name,
+            normalized_mime,
+            data,
+            gemini_api_key_override=gemini_api_key_override,
+        )
 
     raise UnsupportedDocumentError("Unsupported file type", tags=["UNSUPPORTED_TYPE"])
 
@@ -417,9 +431,6 @@ def _is_garbage_text(text: str) -> bool:
     if not text:
         return False
 
-    # 制御文字・記号のパターン (U+0000-U+001F, U+007F, U+FFFD, および外字/合成用記号の一部)
-    # また、今回見つかった 'ʹඞͣ΍͍ͬͯͩ͘͞' のようなギリシャ文字/キリル文字等の異常混入も検知対象に含める
-    # 日本語/英語/数字/一般的な記号以外の割合をチェック
     total = len(text)
     legit_pattern = re.compile(
         r"[a-zA-Z0-9\s"
@@ -436,5 +447,107 @@ def _is_garbage_text(text: str) -> bool:
         return False
 
     legit_ratio = legit_count / total
-    # 正常な文字が50%以下の場合はゴミとみなす（経験則）
     return legit_ratio < 0.5
+
+
+def process_document_ingestion(doc_id: str, gemini_api_key: str | None = None) -> None:
+    settings = get_settings()
+    db = SessionLocal()
+    try:
+        document = db.get(Document, uuid.UUID(doc_id))
+        if not document:
+            logger.error("Document %s not found for ingestion", doc_id)
+            return
+
+        document.status = DocumentStatus.processing
+        db.commit()
+
+        storage = StorageService()
+        data = storage.download_bytes(document.storage_key)
+
+        # Start ingestion run record
+        run = IngestionRun(document_id=document.id)
+        db.add(run)
+        db.commit()
+
+        try:
+            result = parse_document(
+                document.file_name,
+                document.mime_type,
+                data,
+                gemini_api_key_override=gemini_api_key,
+            )
+
+            chunks = build_chunks(result.blocks)
+            
+            # Embedding
+            if chunks:
+                api_key = _normalize_api_key(gemini_api_key) or settings.gemini_api_key
+                if not api_key:
+                    raise IngestionError("Gemini API key is required for embedding")
+                
+                client = GeminiClient(api_key=api_key, base_url=settings.gemini_base_url)
+                texts = [c.text for c in chunks]
+                embeddings = client.embed_documents(
+                    settings.embedding_model, 
+                    texts, 
+                    dimension=settings.embedding_dim
+                )
+
+                for i, (chunk_payload, embedding) in enumerate(zip(chunks, embeddings)):
+                    chunk = Chunk(
+                        id=uuid.uuid4(),
+                        workspace_id=document.workspace_id,
+                        document_id=document.id,
+                        chunk_index=chunk_payload.chunk_index,
+                        text=chunk_payload.text,
+                        page_start=chunk_payload.page_start,
+                        page_end=chunk_payload.page_end,
+                        section_title=chunk_payload.section_title,
+                        snippet=chunk_payload.snippet,
+                        embedding=embedding,
+                        fts=sa_text(f"to_tsvector('japanese', :text)").bindparams(text=chunk_payload.text),
+                    )
+                    db.add(chunk)
+
+            document.status = DocumentStatus.ready
+            document.page_count = result.page_count
+            document.tags = result.tags
+            
+            run.finished_at = datetime.now()
+            run.extracted_pages = result.extracted_pages
+            run.failed_pages = result.failed_pages
+            run.failed_pages_count = len(result.failed_pages)
+            run.ocr_used_pages = result.ocr_used_pages
+            run.chunk_count = len(chunks)
+
+        except Exception as exc:
+            logger.exception("Ingestion failed for document %s", doc_id)
+            document.status = DocumentStatus.failed
+            document.fail_reason = str(exc)
+            run.finished_at = datetime.now()
+            run.log = {"error": str(exc)}
+
+        db.commit()
+    finally:
+        db.close()
+
+
+def _parse_video(
+    file_name: str,
+    mime_type: str,
+    data: bytes,
+    gemini_api_key_override: str | None = None,
+) -> ParseResult:
+    # コスト削減のため、Geminiによる動画解析をスキップし、ファイル名のみをコンテンツとして保持します。
+    # これによりリンクの提供は可能にしつつ、API料金を0に抑えます。
+    logger.info("Video ingestion (lightweight mode): %s", file_name)
+
+    return ParseResult(
+        page_count=None,
+        extracted_pages=1,
+        failed_pages=[],
+        ocr_used_pages=[],
+        tags=["VIDEO_CONTENT", "TITLE_ONLY"],
+        blocks=[TextBlock(text=f"Video Title: {file_name}", page=None, section_title="Video Information")],
+    )
