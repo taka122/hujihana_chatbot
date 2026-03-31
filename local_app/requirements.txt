@@ -1,0 +1,8 @@
+# ローカルアプリ専用の追加依存ライブラリ
+# (既存の requirements.txt の依存関係に加えて必要)
+streamlit>=1.35.0
+numpy>=1.26.0
+pypdf>=5.1.0
+python-docx>=1.1.2
+Pillow>=11.0.0
+pydantic-settings>=2.7.0
