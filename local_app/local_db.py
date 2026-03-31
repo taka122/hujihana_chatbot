@@ -191,22 +191,22 @@ class LocalDatabase:
         if not tokens:
             return []
 
-        # Build WHERE clause: all tokens must appear in text (AND logic)
-        like_clauses = " AND ".join(["c.text LIKE ?" for _ in tokens])
-        params = [f"%{t}%" for t in tokens]
-        params.append(top_k)
+        # All token values are passed as parameterized placeholders to prevent
+        # SQL injection.  The SQL structure itself only depends on len(tokens).
+        placeholder_count = min(len(tokens), 20)  # cap to avoid huge queries
+        tokens = tokens[:placeholder_count]
 
-        rows = self._conn.execute(
-            f"""
-            SELECT c.id, c.document_id, c.chunk_index, c.text, c.snippet,
-                   c.page_start, c.page_end, c.section_title,
-                   d.file_name,
-                   1.0 AS score
-            FROM chunks c
-            JOIN documents d ON d.id = c.document_id
-            WHERE d.status = 'ready' AND {like_clauses}
-            LIMIT ?
-            """,
-            params,
-        ).fetchall()
+        base_sql = (
+            "SELECT c.id, c.document_id, c.chunk_index, c.text, c.snippet,"
+            " c.page_start, c.page_end, c.section_title, d.file_name, 1.0 AS score"
+            " FROM chunks c"
+            " JOIN documents d ON d.id = c.document_id"
+            " WHERE d.status = 'ready'"
+        )
+        # Append one LIKE clause per token — all values are bound via ?
+        and_clauses = " AND ".join("c.text LIKE ?" for _ in tokens)
+        sql = f"{base_sql} AND {and_clauses} LIMIT ?"
+        params: list[Any] = [f"%{t}%" for t in tokens] + [top_k]
+
+        rows = self._conn.execute(sql, params).fetchall()
         return [dict(r) for r in rows]
