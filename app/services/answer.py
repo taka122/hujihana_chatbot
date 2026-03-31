@@ -38,7 +38,7 @@ class AnswerService:
 
         context_map = {str(item.chunk_id): item for item in contexts}
 
-        parsed = self._parse_with_retry(raw_getter=lambda: self._generate_gemini(query, contexts))
+        parsed = self._parse_with_retry(raw_getter=lambda: self._generate_gemini(query, contexts), attempts=self._settings.llm_retry_attempts)
         if not parsed:
             logger.warning("Gemini JSON parse failed repeatedly. Falling back to extractive response.")
             return self._mock_answer(query, contexts)
@@ -77,7 +77,7 @@ class AnswerService:
                     f"file_name={item.file_name}\n"
                     f"ref={item.ref}\n"
                     f"snippet={item.snippet}\n"
-                    f"text={item.text[:2400]}"
+                    f"text={item.text[:self._settings.answer_context_text_max_chars]}"
                 )
                 for item in contexts
             ]
