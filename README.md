@@ -129,6 +129,77 @@ curl -X POST "http://localhost:8000/api/workspaces/<wid>/chat/query" \
   -d '{"query":"有給休暇の繰越上限は？"}'
 ```
 
+## トラブルシューティング
+
+### `src refspec ... does not match any` でプッシュできない
+
+PowerShell で以下のようなエラーが出た場合:
+
+```
+PS C:\Users\<ユーザー名>\hujihana_chatbot> git push origin yamashita/branch
+error: src refspec yamashita/branch does not match any
+error: failed to push some refs to 'https://github.com/taka122/hujihana_chatbot.git'
+```
+
+**原因**: ローカルに `yamashita/branch` というブランチが存在しないため、Git がプッシュ対象を見つけられません。主な原因は次のいずれかです。
+
+- ブランチをまだ作成していない
+- ブランチ名にタイポがある（大文字・小文字の違いなど）
+- そのブランチにまだ 1 件もコミットがない
+
+**解決手順（PowerShell）**
+
+1. **ローカルブランチの一覧を確認する**
+
+   ```powershell
+   git branch
+   ```
+
+   `yamashita/branch` が表示されない場合は、ブランチがまだ存在しません。
+
+2. **ブランチを作成して切り替える**
+
+   ```powershell
+   git checkout -b yamashita/branch
+   ```
+
+   既にブランチが存在する場合は `-b` なしで切り替えます:
+
+   ```powershell
+   git checkout yamashita/branch
+   ```
+
+3. **少なくとも 1 件コミットがあることを確認する**
+
+   変更を加えてコミットします:
+
+   ```powershell
+   git add .
+   git commit -m "initial commit on yamashita/branch"
+   ```
+
+   コミットが 1 件もないブランチはプッシュできません。
+
+4. **`-u` オプションを付けてプッシュする**
+
+   ```powershell
+   git push -u origin yamashita/branch
+   ```
+
+   `-u` を付けると上流ブランチが設定され、以降は `git push` だけで済みます。
+
+5. **ブランチ名のミスマッチを確認する**
+
+   ローカルのブランチ名とプッシュ先のブランチ名が違う場合は、コロン `:` で指定します:
+
+   ```powershell
+   git push origin ローカルブランチ名:リモートブランチ名
+   # 例:
+   git push -u origin yamashita/branch:yamashita/branch
+   ```
+
+---
+
 ## 実装上の注意
 - PDFでテキスト抽出できないページは、`PDF_OCR_ENABLED=true` かつ Gemini APIキーがある場合にOCRを試行します。成功したページは `ocr_used_pages` に記録されます。
 - OCRで救済できなかったページは `failed_pages` に `image_only_or_no_text` として記録されます。
