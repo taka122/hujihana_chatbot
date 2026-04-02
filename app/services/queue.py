@@ -24,3 +24,19 @@ def enqueue_ingestion(
         job_timeout=60 * 20,
     )
     return job.id
+
+
+def enqueue_drive_import(
+    workspace_id: str,
+    folder_id: str,
+    gemini_api_key: str | None = None,
+) -> str:
+    queue = get_queue()
+    job = queue.enqueue(
+        "worker.jobs.import_from_drive",
+        workspace_id,
+        folder_id,
+        gemini_api_key,
+        job_timeout=60 * 10,
+    )
+    return job.id

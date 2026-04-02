@@ -178,3 +178,18 @@ def _extract_api_key_header(request: Request, header_name: str) -> str | None:
         return None
     stripped = value.strip()
     return stripped or None
+
+
+@router.post("/import-drive", status_code=status.HTTP_202_ACCEPTED)
+async def import_drive(
+    wid: uuid.UUID,
+    request: Request,
+    folder_id: str,
+    db: Session = Depends(get_db),
+):
+    _ensure_workspace(db, wid)
+    from app.services.queue import enqueue_drive_import
+    
+    gemini_api_key = _extract_api_key_header(request, "x-gemini-api-key")
+    job_id = enqueue_drive_import(str(wid), folder_id, gemini_api_key=gemini_api_key)
+    return {"job_id": job_id, "status": "enqueued"}

@@ -65,6 +65,15 @@ export function SourceViewer({ workspaceId, citation }: SourceViewerProps) {
       ? withPageAnchor(previewQuery.data.url, page)
       : previewQuery.data?.url;
 
+  const isDriveUrl = previewUrl?.includes("drive.google.com");
+  let driveEmbedUrl = previewUrl;
+  if (isDriveUrl && previewUrl) {
+    driveEmbedUrl = previewUrl.replace("/view", "/preview");
+    if (timestamp !== null) {
+      driveEmbedUrl += `?t=${timestamp}`;
+    }
+  }
+
   const previewSnippet = citation.snippet || previewQuery.data?.snippet || previewQuery.data?.text || "";
 
   return (
@@ -112,16 +121,16 @@ export function SourceViewer({ workspaceId, citation }: SourceViewerProps) {
                       : "参照位置情報なし"}
                   </p>
                   <a
-                    href={previewUrl}
+                    href={previewUrl + (timestamp !== null ? `?t=${timestamp}` : "")}
                     target="_blank"
                     rel="noreferrer"
                     className="inline-flex h-9 items-center gap-1 rounded-md bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-700 shadow-sm transition-all"
                   >
                     <ExternalLink className="h-4 w-4" />
-                    大画面で開く
+                    {isDriveUrl ? "Google Drive で開く" : "大画面で開く"}
                   </a>
                 </div>
-                {isVideoSource ? (
+                {isVideoSource && !isDriveUrl ? (
                   <div className="relative aspect-video w-full overflow-hidden rounded-md border border-slate-200 bg-black">
                     <video
                       ref={videoRef}
@@ -132,9 +141,10 @@ export function SourceViewer({ workspaceId, citation }: SourceViewerProps) {
                   </div>
                 ) : (
                   <iframe
-                    src={previewUrl}
+                    src={driveEmbedUrl || ""}
                     title="source-preview"
                     className="h-[56vh] w-full rounded-md border border-slate-200 bg-white"
+                    allow="autoplay"
                   />
                 )}
               </div>

@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     llm_model: str = "gemini-2.0-flash"
     gemini_api_key: str | None = None
     gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta"
+    
+    google_drive_service_account_path: str | None = "service-account.json"
+    google_drive_service_account_info: str | None = None  # JSON string as an alternative to file path
 
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
 

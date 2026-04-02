@@ -46,6 +46,8 @@ services:
       - redis
     ports:
       - "8000:8000"
+    volumes:
+      - .:/app
 
   worker:
     build: .
@@ -64,6 +66,8 @@ services:
       - postgres
       - minio
       - redis
+    volumes:
+      - .:/app
 
 volumes:
   postgres_data:

@@ -9,8 +9,11 @@ from sqlalchemy import delete
 from app.db import SessionLocal
 from app.models import Chunk, Document, DocumentStatus, IngestionRun
 from app.services.embed import EmbeddingService, EmbeddingError
-from app.services.ingest import IngestionError, UnsupportedDocumentError, build_chunks, parse_document
+from app.services.ingest import IngestionError, UnsupportedDocumentError, build_chunks, parse_document, import_from_drive_job
 from app.services.storage import StorageService
+from app.services.drive_service import DriveService
+from app.config import get_settings
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +47,18 @@ def process_document_ingestion(
         db.flush()
 
         storage = StorageService()
-        raw_bytes = storage.download_bytes(document.storage_key)
+        if document.storage_key.startswith("drive://"):
+            # Google Driveからダウンロード
+            settings = get_settings()
+            sa_path = settings.google_drive_service_account_path
+            with open(sa_path, "r") as f:
+                sa_info = json.load(f)
+            drive = DriveService(sa_info)
+            file_id = document.storage_key.replace("drive://", "")
+            raw_bytes = drive.download_file_to_memory(file_id)
+        else:
+            # 通常のS3(Minio)からダウンロード
+            raw_bytes = storage.download_bytes(document.storage_key)
 
         parse_result = parse_document(
             document.file_name,
@@ -186,3 +200,12 @@ def _mark_failed(
 
     db.commit()
     logger.error("Ingestion failed: document=%s reason=%s", document_id, reason)
+
+def import_from_drive(
+    workspace_id: str,
+    folder_id: str,
+    gemini_api_key: str | None = None,
+) -> None:
+    """Google Driveフォルダのインポートを実行するトップレベルジョブ"""
+    logger.info("Worker: import_from_drive job started. wid=%r, fid=%r", workspace_id, folder_id)
+    import_from_drive_job(workspace_id, folder_id, gemini_api_key=gemini_api_key)

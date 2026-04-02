@@ -69,14 +69,27 @@ class StorageService:
             self._client.create_bucket(Bucket=self._bucket)
 
     def upload_bytes(self, key: str, data: bytes, content_type: str) -> None:
+        if key.startswith("drive://"):
+            logger.info("Skipping S3 upload for Drive-sourced file: %s", key)
+            return
         self.ensure_bucket()
         self._client.put_object(Bucket=self._bucket, Key=key, Body=data, ContentType=content_type)
 
     def download_bytes(self, key: str) -> bytes:
+        if key.startswith("drive://"):
+            # Note: In a production app, we'd use the DriveService here.
+            # For simplicity, we'll assume the caller (ingest job) handles Drive files specially
+            # or we implement a fallback if needed.
+            raise RuntimeError("Direct download_bytes from drive:// not implemented in StorageService yet. Use DriveService directly.")
         response = self._client.get_object(Bucket=self._bucket, Key=key)
         return response["Body"].read()
 
     def generate_presigned_get_url(self, key: str) -> str:
+        if key.startswith("drive://"):
+            # Return the direct webViewLink (which we'll store in Document if needed, 
+            # or just return the drive URL base)
+            drive_id = key.replace("drive://", "")
+            return f"https://drive.google.com/file/d/{drive_id}/view"
         return self._presign_client.generate_presigned_url(
             ClientMethod="get_object",
             Params={"Bucket": self._bucket, "Key": key},
@@ -84,4 +97,7 @@ class StorageService:
         )
 
     def delete_object(self, key: str) -> None:
+        if key.startswith("drive://"):
+            logger.info("Skipping S3 delete for Drive-sourced file: %s", key)
+            return
         self._client.delete_object(Bucket=self._bucket, Key=key)

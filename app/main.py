@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 
@@ -34,3 +34,27 @@ def root() -> RedirectResponse:
 @app.get("/healthz")
 def healthz() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.post("/import-drive")
+async def import_drive_shortcut(
+    folder_id: str = Body(..., embed=True),
+):
+    from app.db import SessionLocal
+    from app.models import Workspace
+    from app.services.queue import enqueue_drive_import
+    from app.config import get_settings
+    from fastapi import HTTPException
+    
+    db = SessionLocal()
+    settings = get_settings()
+    try:
+        # 最初のワークスペースを使用
+        workspace = db.query(Workspace).first()
+        if not workspace:
+            raise HTTPException(status_code=404, detail="No workspace found")
+            
+        job_id = enqueue_drive_import(str(workspace.id), folder_id, gemini_api_key=settings.gemini_api_key)
+        return {"job_id": job_id, "workspace_id": workspace.id, "status": "enqueued"}
+    finally:
+        db.close()

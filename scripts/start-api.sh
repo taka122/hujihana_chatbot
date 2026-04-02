@@ -1,9 +1,6 @@
-#!/usr/bin/env sh
-set -eu
-
-until alembic upgrade head; do
-  echo "Waiting for database to be ready..."
-  sleep 2
-done
-
+#!/bin/sh
+set -e
+# Run migrations
+alembic upgrade head
+# Start API
 exec uvicorn app.main:app --host 0.0.0.0 --port 8000
