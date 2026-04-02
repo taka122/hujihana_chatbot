@@ -1,0 +1,32 @@
+﻿worker-1  | 2026-04-02 02:40:16,922 INFO __main__ Starting RQ worker. queue=ingestion
+worker-1  | 2026-04-02 02:40:16,933 INFO rq.worker Worker rq:worker:bf037032935c4ca289a14831c681fadc started with PID 1, version 1.16.2
+worker-1  | 2026-04-02 02:40:16,933 INFO rq.worker Subscribing to channel rq:pubsub:bf037032935c4ca289a14831c681fadc
+worker-1  | 2026-04-02 02:40:16,935 INFO rq.worker *** Listening on ingestion...
+worker-1  | 2026-04-02 02:40:16,936 INFO rq.worker Cleaning registries for queue: ingestion
+worker-1  | 2026-04-02 02:40:24,061 INFO rq.worker ingestion: worker.jobs.import_from_drive('09482e8b-bbe8-484d-9959-f928c10ffc46', '1zcxbAmnodfu1gMtLOHATFuYM8Ak-hi0H', 'AIzaSyAittXKDFRoQT_TmBQoJFZpS7aUZtKvAhE') (d2372789-2104-4a39-90e9-096c91d62677)
+worker-1  | 2026-04-02 02:40:25,069 ERROR rq.worker [Job d2372789-2104-4a39-90e9-096c91d62677]: exception raised while executing (worker.jobs.import_from_drive)
+worker-1  | Traceback (most recent call last):
+worker-1  |   File "/usr/local/lib/python3.11/site-packages/rq/utils.py", line 118, in import_attribute
+worker-1  |     attribute_owner = getattr(module, attribute_owner_name)
+worker-1  |                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+worker-1  | AttributeError: module 'worker' has no attribute 'jobs'
+worker-1  | 
+worker-1  | During handling of the above exception, another exception occurred:
+worker-1  | 
+worker-1  | Traceback (most recent call last):
+worker-1  |   File "/usr/local/lib/python3.11/site-packages/rq/worker.py", line 1430, in perform_job
+worker-1  |     rv = job.perform()
+worker-1  |          ^^^^^^^^^^^^^
+worker-1  |   File "/usr/local/lib/python3.11/site-packages/rq/job.py", line 1280, in perform
+worker-1  |     self._result = self._execute()
+worker-1  |                    ^^^^^^^^^^^^^^^
+worker-1  |   File "/usr/local/lib/python3.11/site-packages/rq/job.py", line 1317, in _execute
+worker-1  |     result = self.func(*self.args, **self.kwargs)
+worker-1  |              ^^^^^^^^^
+worker-1  |   File "/usr/local/lib/python3.11/site-packages/rq/job.py", line 425, in func
+worker-1  |     return import_attribute(self.func_name)
+worker-1  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+worker-1  |   File "/usr/local/lib/python3.11/site-packages/rq/utils.py", line 120, in import_attribute
+worker-1  |     raise ValueError('Invalid attribute name: %s' % attribute_name)
+worker-1  | ValueError: Invalid attribute name: import_from_drive
+worker-1  | 

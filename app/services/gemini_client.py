@@ -176,28 +176,60 @@ class GeminiClient:
         return data
 
     def _post(self, path: str, payload: dict[str, Any], method: str = "POST") -> dict[str, Any]:
-        url = f"{self._base_url}/{path}"
-        data_bytes = json.dumps(payload).encode("utf-8") if payload else None
-        request = urllib.request.Request(
-            url=url,
-            method=method,
-            data=data_bytes,
-            headers={
+        import time
+        import random
+        
+        url = (
+            f"{self._base_url}/{path}"
+            if "?" in path
+            else f"{self._base_url}/{path}?key={self._api_key}"
+        )
+        
+        # We handle the key in the URL for consistency with File API if needed, 
+        # but usually it's in the header. Let's stick to header if not specified in path.
+        if "key=" in path:
+            url = f"{self._base_url}/{path}"
+            headers = {"Content-Type": "application/json"}
+        else:
+            url = f"{self._base_url}/{path}"
+            headers = {
                 "Content-Type": "application/json",
                 "x-goog-api-key": self._api_key,
-            },
-        )
+            }
 
-        try:
-            with urllib.request.urlopen(request, timeout=60) as response:
-                raw = response.read().decode("utf-8")
-        except urllib.error.HTTPError as exc:
-            body = exc.read().decode("utf-8", errors="ignore")
-            raise GeminiApiError(f"Gemini API HTTP {exc.code}: {body}") from exc
-        except urllib.error.URLError as exc:
-            raise GeminiApiError(f"Gemini API connection error: {exc}") from exc
+        data_bytes = json.dumps(payload).encode("utf-8") if payload else None
+        
+        max_retries = 10
+        for attempt in range(max_retries):
+            request = urllib.request.Request(
+                url=url,
+                method=method,
+                data=data_bytes,
+                headers=headers,
+            )
 
-        parsed = json.loads(raw)
-        if "error" in parsed:
-            raise GeminiApiError(str(parsed["error"]))
-        return parsed
+            try:
+                with urllib.request.urlopen(request, timeout=120) as response:
+                    raw = response.read().decode("utf-8")
+                    parsed = json.loads(raw)
+                    if "error" in parsed:
+                        # Sometimes errors are in the body even with 200 (not common in Gemini but safe)
+                        raise GeminiApiError(str(parsed["error"]))
+                    return parsed
+            except urllib.error.HTTPError as exc:
+                body = exc.read().decode("utf-8", errors="ignore")
+                # 429: Rate Limit, 500/503: Server Error - these are retryable
+                if exc.code in {429, 500, 503} and attempt < max_retries - 1:
+                    wait_time = (2 ** attempt) + random.random()
+                    logger.warning("Gemini API error %d. Retrying in %.2fs... (attempt %d/%d)", 
+                                   exc.code, wait_time, attempt + 1, max_retries)
+                    time.sleep(wait_time)
+                    continue
+                raise GeminiApiError(f"Gemini API HTTP {exc.code}: {body}") from exc
+            except urllib.error.URLError as exc:
+                if attempt < max_retries - 1:
+                    time.sleep(2)
+                    continue
+                raise GeminiApiError(f"Gemini API connection error: {exc}") from exc
+        
+        raise GeminiApiError("Max retries exceeded")

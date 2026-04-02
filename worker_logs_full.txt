@@ -1,0 +1,25 @@
+﻿worker-1  | 2026-04-02 03:01:58,759 INFO __main__ Starting RQ worker. queue=ingestion
+worker-1  | 2026-04-02 03:01:58,770 INFO rq.worker Worker rq:worker:fb37a77b77c04463bbb59e6ccd6fcd46 started with PID 1, version 1.16.2
+worker-1  | 2026-04-02 03:01:58,770 INFO rq.worker Subscribing to channel rq:pubsub:fb37a77b77c04463bbb59e6ccd6fcd46
+worker-1  | 2026-04-02 03:01:58,776 INFO rq.worker *** Listening on ingestion...
+worker-1  | 2026-04-02 03:01:58,777 INFO rq.worker Cleaning registries for queue: ingestion
+worker-1  | 2026-04-02 03:01:58,792 WARNING rq.registry StartedJobRegistry cleanup: Moving job to FailedJobRegistry (due to AbandonedJobError)
+worker-1  | 2026-04-02 03:02:09,572 INFO rq.worker ingestion: worker.jobs.process_document_ingestion('b43d4d17-517c-4307-9011-22726fcd10d3', None) (a820bb65-7151-4aa8-8f04-a269e6927b0b)
+worker-1  | 2026-04-02 03:02:11,145 INFO googleapiclient.discovery_cache file_cache is only supported with oauth2client<4.0.0
+worker-1  | 2026-04-02 03:02:12,018 ERROR worker.jobs Unexpected ingestion failure: b43d4d17-517c-4307-9011-22726fcd10d3
+worker-1  | Traceback (most recent call last):
+worker-1  |   File "/app/worker/jobs.py", line 58, in process_document_ingestion
+worker-1  |     raw_bytes = drive.download_file_to_memory(file_id)
+worker-1  |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+worker-1  |   File "/app/app/services/drive_service.py", line 49, in download_file_to_memory
+worker-1  |     status, done = downloader.next_chunk()
+worker-1  |                    ^^^^^^^^^^^^^^^^^^^^^^^
+worker-1  |   File "/usr/local/lib/python3.11/site-packages/googleapiclient/_helpers.py", line 130, in positional_wrapper
+worker-1  |     return wrapped(*args, **kwargs)
+worker-1  |            ^^^^^^^^^^^^^^^^^^^^^^^^
+worker-1  |   File "/usr/local/lib/python3.11/site-packages/googleapiclient/http.py", line 780, in next_chunk
+worker-1  |     raise HttpError(resp, content, uri=self._uri)
+worker-1  | googleapiclient.errors.HttpError: <HttpError 404 when requesting https://www.googleapis.com/drive/v3/files/1JDSGLGb-03B6KmqtNnVpGLHaZeEt?alt=media returned "File not found: 1JDSGLGb-03B6KmqtNnVpGLHaZeEt.". Details: "[{'message': 'File not found: 1JDSGLGb-03B6KmqtNnVpGLHaZeEt.', 'domain': 'global', 'reason': 'notFound', 'location': 'fileId', 'locationType': 'parameter'}]">
+worker-1  | 2026-04-02 03:02:12,065 ERROR worker.jobs Ingestion failed: document=b43d4d17-517c-4307-9011-22726fcd10d3 reason=unexpected_error: <HttpError 404 when requesting https://www.googleapis.com/drive/v3/files/1JDSGLGb-03B6KmqtNnVpGLHaZeEt?alt=media returned "File not found: 1JDSGLGb-03B6KmqtNnVpGLHaZeEt.". Details: "[{'message': 'File not found: 1JDSGLGb-03B6KmqtNnVpGLHaZeEt.', 'domain': 'global', 'reason': 'notFound', 'location': 'fileId', 'locationType': 'parameter'}]">
+worker-1  | 2026-04-02 03:02:12,068 INFO rq.worker ingestion: Job OK (a820bb65-7151-4aa8-8f04-a269e6927b0b)
+worker-1  | 2026-04-02 03:02:12,068 INFO rq.worker Result is kept for 500 seconds

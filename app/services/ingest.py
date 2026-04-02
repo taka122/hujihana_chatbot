@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import io
 import logging
+import mimetypes
+import os
 import re
 import time
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, List, Optional
 
 from docx import Document as DocxDocument
 from pypdf import PdfReader
@@ -298,17 +301,18 @@ def _parse_video(
 
     # 2. Wait for processing
     logger.info("Waiting for video processing: %s", file_name_api)
-    max_retries = 30
-    for _ in range(max_retries):
+    max_retries = 100
+    for i in range(max_retries):
+        logger.info("Polling Gemini file status (it=%d/%d): %s", i+1, max_retries, file_name_api)
         status = client.get_file_status(file_name_api)
         state = status.get("state")
         if state == "ACTIVE":
             break
         if state == "FAILED":
-            raise IngestionError("Gemini video processing failed")
-        time.sleep(2)
+            raise IngestionError(f"Gemini video processing failed: {status}")
+        time.sleep(30)
     else:
-        raise IngestionError("Gemini video processing timed out")
+        raise IngestionError("Gemini video processing timed out after 100 attempts")
 
     # 3. Generate timestamped summary
     logger.info("Generating timestamped summary for %s", file_name)
@@ -579,3 +583,68 @@ def _extract_pdf_text_via_gemini_file_api(data: bytes, client: GeminiClient, mod
     except Exception as e:
         logger.error("Error in Gemini native PDF parsing: %s", e)
         return ""
+
+def import_from_drive_job(
+    workspace_id: str,
+    folder_id: str,
+    gemini_api_key: str | None = None,
+) -> None:
+    """Google Driveフォルダ内のファイルをスキャンしてDBに登録する"""
+    from app.db import SessionLocal
+    from app.models import Document, DocumentStatus
+    from app.services.drive_service import DriveService
+    from app.services.queue import enqueue_ingestion
+    from app.config import get_settings
+    import json
+
+    db = SessionLocal()
+    settings = get_settings()
+    try:
+        # workspace_idを安全にUUIDに変換
+        if isinstance(workspace_id, str):
+            wid = uuid.UUID(workspace_id)
+        else:
+            wid = workspace_id
+
+        logger.info("Starting import_from_drive_job. workspace_id=%s", wid)
+        sa_path = settings.google_drive_service_account_path
+        if not sa_path:
+            logger.error("GOOGLE_DRIVE_SERVICE_ACCOUNT_PATH is not set")
+            return
+            
+        with open(sa_path, "r") as f:
+            sa_info = json.load(f)
+            
+        drive = DriveService(sa_info)
+        files = drive.list_files_in_folder(folder_id)
+        logger.info("Found %d files in Drive folder %s", len(files), folder_id)
+
+        for f in files:
+            # すでに登録済みか確認
+            storage_key = f"drive://{f['id']}"
+            existing = db.query(Document).filter(Document.storage_key == storage_key).first()
+            if existing:
+                continue
+
+            doc = Document(
+                id=uuid.uuid4(),
+                workspace_id=wid,
+                file_name=f['name'],
+                mime_type=f['mimeType'],
+                storage_key=storage_key,
+                status=DocumentStatus.processing,
+                tags=["google-drive"],
+            )
+            db.add(doc)
+            db.commit()
+            
+            # 各ファイルのインポートジョブをキューに追加
+            enqueue_ingestion(str(doc.id), gemini_api_key=gemini_api_key)
+            logger.info("Enqueued ingestion for Drive file: %s", f['name'])
+
+    except Exception as e:
+        import traceback
+        logger.error("Failed to import from Drive: %s", e)
+        logger.error(traceback.format_exc())
+    finally:
+        db.close()
