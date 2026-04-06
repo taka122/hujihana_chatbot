@@ -9,7 +9,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    app_name: str = "Universal RAG PoC"
+    app_name: str = "藤花歯科クリニック専用Chatbot"
     environment: str = "development"
     clinic_password: str | None = None
 

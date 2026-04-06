@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { LogoutButton } from "@/components/logout-button";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -47,10 +48,13 @@ export default function HomePage() {
   };
 
   return (
-    <main className="flex min-h-screen items-center justify-center p-6">
+    <main className="relative flex min-h-screen items-center justify-center p-6">
+      <div className="absolute right-6 top-6">
+        <LogoutButton className="gap-2" />
+      </div>
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle>Universal RAG PoC</CardTitle>
+          <CardTitle>藤花歯科クリニック専用Chatbot</CardTitle>
           <CardDescription>最初にWorkspaceを選択または作成します。</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

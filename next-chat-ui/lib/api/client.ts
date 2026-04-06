@@ -4,6 +4,7 @@ import type {
   ChatResponse,
   CreateWorkspaceRequest,
   Doc,
+  DriveImportResponse,
   IngestionReport,
   SourcePreview,
   UploadResponse,
@@ -164,6 +165,7 @@ function normalizeChatResponse(raw: unknown): ChatResponse {
       const refType = citation?.ref_type;
       const ref = citation?.ref;
       const snippet = citation?.snippet;
+      const chunkId = citation?.chunk_id;
       const normalizedRefType: "page" | "slide" | "sheet" | null =
         refType === "page" || refType === "slide" || refType === "sheet" ? refType : null;
       if (
@@ -171,18 +173,19 @@ function normalizeChatResponse(raw: unknown): ChatResponse {
         (typeof fileName !== "string" && typeof fileName !== "number") ||
         !normalizedRefType ||
         (typeof ref !== "string" && typeof ref !== "number") ||
-        (typeof snippet !== "string" && typeof snippet !== "number")
+        (typeof snippet !== "string" && typeof snippet !== "number") ||
+        (typeof chunkId !== "string" && typeof chunkId !== "number")
       ) {
         return null;
       }
-        return {
-          doc_id: String(docId),
-          file_name: String(fileName),
-          ref_type: normalizedRefType,
-          ref: String(ref),
-          snippet: String(snippet),
+      return {
+        doc_id: String(docId),
+        file_name: String(fileName),
+        ref_type: normalizedRefType,
+        ref: String(ref),
+        snippet: String(snippet),
         score: typeof citation?.score === "number" ? citation.score : null,
-        chunk_id: citation?.chunk_id == null ? undefined : String(citation.chunk_id)
+        chunk_id: String(chunkId)
       };
     })
     .filter((value): value is NonNullable<typeof value> => value !== null);
@@ -281,6 +284,23 @@ export async function uploadDoc(
 
     xhr.send(formData);
   });
+}
+
+export async function importDriveFolder(
+  workspaceId: string,
+  folderUrl: string
+): Promise<DriveImportResponse> {
+  const payload = await request<unknown>(`/api/workspaces/${workspaceId}/docs/import-drive-folder`, {
+    method: "POST",
+    body: JSON.stringify({ folder_url: folderUrl })
+  });
+  const item = asRecord(payload);
+  return {
+    folder_id: String(item?.folder_id ?? ""),
+    queued_count: typeof item?.queued_count === "number" ? item.queued_count : 0,
+    skipped_count: typeof item?.skipped_count === "number" ? item.skipped_count : 0,
+    doc_ids: Array.isArray(item?.doc_ids) ? item.doc_ids.map((value) => String(value)) : []
+  };
 }
 
 export async function fetchIngestionReport(

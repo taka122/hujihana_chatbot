@@ -4,8 +4,8 @@ import { AppProviders } from "@/app/providers";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Universal RAG PoC",
-  description: "Upload docs, ask quickly, verify citations"
+  title: "藤花歯科クリニック専用Chatbot",
+  description: "院内資料をすばやく確認できるチャットアプリ"
 };
 
 export default function RootLayout({

@@ -11,6 +11,13 @@ export type UploadResponse = {
   doc_id: string;
 };
 
+export type DriveImportResponse = {
+  folder_id: string;
+  queued_count: number;
+  skipped_count: number;
+  doc_ids: string[];
+};
+
 export type DocStatus = "processing" | "ready" | "failed";
 
 export type Doc = {

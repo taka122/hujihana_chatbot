@@ -7,6 +7,7 @@ import { ChatPanel } from "@/components/chat-panel";
 import { DocTable } from "@/components/doc-table";
 import { DocUploader } from "@/components/doc-uploader";
 import { IngestionReportDialog } from "@/components/ingestion-report-dialog";
+import { LogoutButton } from "@/components/logout-button";
 import { SourceViewer } from "@/components/source-viewer";
 import { WorkspaceSelector } from "@/components/workspace-selector";
 import { Button } from "@/components/ui/button";
@@ -155,11 +156,12 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
     <main className="mx-auto flex min-h-screen w-full max-w-[1800px] flex-col gap-4 p-4 lg:p-6">
       <header className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white/90 p-3 shadow-sm backdrop-blur">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">藤花歯科クリニック専用Chatbot</p>
-          <h1 className="text-lg font-semibold text-slate-900">AI歯科助手ガイダンス</h1>
+          <p className="text-xs font-semibold tracking-[0.08em] text-slate-500">藤花歯科クリニック専用Chatbot</p>
+          <h1 className="text-lg font-semibold text-slate-900">受付マニュアル</h1>
         </div>
         <div className="flex items-center gap-2">
           <WorkspaceSelector currentWorkspaceId={workspaceId} />
+          <LogoutButton className="gap-2" />
           <Sheet open={sourceSheetOpen} onOpenChange={setSourceSheetOpen}>
             <SheetTrigger asChild>
               <Button variant="outline" className="gap-2 lg:hidden">
