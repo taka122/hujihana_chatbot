@@ -1,22 +1,27 @@
 from __future__ import annotations
 
 import io
+import json
 import logging
-import mimetypes
-import os
 import re
-import time
 import uuid
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any
 
 from docx import Document as DocxDocument
 from pypdf import PdfReader
+from sqlalchemy import func
 
 from app.config import get_settings
+from app.db import SessionLocal
+from app.models import Chunk, Document, DocumentStatus, IngestionRun
+from app.services.drive_service import DriveService
+from app.services.embed import EmbeddingService
 from app.services.gemini_client import GeminiApiError, GeminiClient
-from app.services.text_decode import decode_text_bytes, extract_charset_from_mime
+from app.services.storage import StorageService
+from app.services.text_decode import decode_text_bytes, extract_charset_from_mime, is_probably_garbled_text
 
 logger = logging.getLogger(__name__)
 
@@ -73,14 +78,6 @@ def parse_document(
             gemini_api_key_override=gemini_api_key_override,
         )
 
-    if normalized_mime.startswith("video/") or ext in {".mp4", ".mov", ".avi", ".mkv"}:
-        return _parse_video(
-            file_name,
-            normalized_mime or "video/mp4",
-            data,
-            gemini_api_key_override=gemini_api_key_override,
-        )
-
     if ext == ".docx" or normalized_mime in {
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         "application/msword",
@@ -100,6 +97,14 @@ def parse_document(
         raise UnsupportedDocumentError("XLS/XLSX is not supported in MVP", tags=["UNSUPPORTED_XLS", "TABLE_EXTRACT_FAILED"])
     if ext in {".png", ".jpg", ".jpeg", ".webp", ".tif", ".tiff"}:
         raise UnsupportedDocumentError("Image file requires OCR (not enabled in MVP)", tags=["OCR_REQUIRED"])
+
+    if ext in {".mp4", ".mov", ".avi", ".mkv"} or normalized_mime.startswith("video/"):
+        return _parse_video(
+            file_name,
+            normalized_mime,
+            data,
+            gemini_api_key_override=gemini_api_key_override,
+        )
 
     raise UnsupportedDocumentError("Unsupported file type", tags=["UNSUPPORTED_TYPE"])
 
@@ -183,6 +188,7 @@ def _parse_pdf(
     failed_pages: list[dict] = []
     ocr_used_pages: list[int] = []
     short_text_pages: list[int] = []
+    garbled_pages: list[int] = []
     tags: list[str] = []
     extracted_pages = 0
     low_text_pages = 0
@@ -203,6 +209,8 @@ def _parse_pdf(
         raw = page.extract_text() or ""
         text = raw.strip()
         is_garbage = _is_garbage_text(text)
+        if is_garbage:
+            garbled_pages.append(index)
 
         if len(text) >= min_text_chars and not is_garbage:
             extracted_pages += 1
@@ -218,7 +226,8 @@ def _parse_pdf(
             ocr_pages_attempted += 1
             ocr_text = _extract_page_text_via_ocr(page, ocr_client, settings.pdf_ocr_model)
 
-        if len(ocr_text) >= min_text_chars:
+        ocr_is_garbage = _is_garbage_text(ocr_text)
+        if len(ocr_text) >= min_text_chars and not ocr_is_garbage:
             extracted_pages += 1
             ocr_used_pages.append(index)
             blocks.append(TextBlock(text=ocr_text, page=index, section_title=None))
@@ -226,12 +235,11 @@ def _parse_pdf(
 
         short_candidate = ""
         used_ocr_for_short = False
-        if text or ocr_text:
-            if len(ocr_text) > len(text):
-                short_candidate = ocr_text
-                used_ocr_for_short = True
-            else:
-                short_candidate = text
+        if ocr_text and not ocr_is_garbage:
+            short_candidate = ocr_text
+            used_ocr_for_short = True
+        elif text and not is_garbage:
+            short_candidate = text
 
         if short_candidate:
             extracted_pages += 1
@@ -243,26 +251,21 @@ def _parse_pdf(
 
         failed_pages.append({"page": index, "reason": "image_only_or_no_text"})
 
+    if extracted_pages == 0 and ocr_enabled and ocr_client:
+        full_pdf_text = _extract_pdf_text_via_gemini_document(data, ocr_client, settings.pdf_ocr_model)
+        if full_pdf_text and not _is_garbage_text(full_pdf_text):
+            extracted_pages = page_count or 1
+            failed_pages = []
+            ocr_used_pages = list(range(1, page_count + 1)) if page_count else [1]
+            blocks = [TextBlock(text=full_pdf_text, page=None, section_title="Gemini PDF OCR")]
+            tags.append("PDF_GEMINI_OCR")
+
     if page_count > 0 and low_text_pages / page_count >= settings.image_only_pdf_ratio_threshold:
         tags.append("IMAGE_ONLY_PDF")
-    
-    # NEW: If we have garbage text but NO images were found for local OCR, or if the user wants high quality:
-    # We fallback to Gemini's native PDF parsing.
-    garbage_detected = any(_is_garbage_text(b.text) for b in blocks)
-    if garbage_detected and ocr_enabled and ocr_client:
-        logger.info("Garbage text detected and local OCR was insufficient. Falling back to Gemini native PDF parsing.")
-        gemini_text = _extract_pdf_text_via_gemini_file_api(data, ocr_client, settings.pdf_ocr_model)
-        if gemini_text:
-            # Replace blocks with gemini extracted text
-            blocks = []
-            # Gemini might return pages as "--- Page 1 ---" etc if prompted, but for now we do simple split
-            for part in _split_text(gemini_text, 2000):
-                 blocks.append(TextBlock(text=part, page=None, section_title=None))
-            tags.append("GEMINI_NATIVE_PDF_PARSED")
-            extracted_pages = page_count # assume success
-
     if short_text_pages:
         tags.append("SHORT_TEXT_INCLUDED")
+    if garbled_pages:
+        tags.append("POSSIBLE_MOJIBAKE")
     if ocr_used_pages:
         tags.append("OCR_USED")
     if extracted_pages == 0:
@@ -274,88 +277,6 @@ def _parse_pdf(
         failed_pages=failed_pages,
         ocr_used_pages=ocr_used_pages,
         tags=tags,
-        blocks=blocks,
-    )
-
-
-def _parse_video(
-    file_name: str,
-    mime_type: str,
-    data: bytes,
-    gemini_api_key_override: str | None = None,
-) -> ParseResult:
-    import time
-
-    settings = get_settings()
-    api_key = _normalize_api_key(gemini_api_key_override) or settings.gemini_api_key
-    if not api_key:
-        raise IngestionError("Gemini API key is required for video ingestion")
-
-    client = GeminiClient(api_key=api_key, base_url=settings.gemini_base_url)
-
-    # 1. Upload to Gemini File API
-    logger.info("Uploading video to Gemini File API: %s", file_name)
-    file_info = client.upload_file(data, mime_type, display_name=file_name)
-    file_name_api = file_info["name"]
-    file_uri = file_info["uri"]
-
-    # 2. Wait for processing
-    logger.info("Waiting for video processing: %s", file_name_api)
-    max_retries = 100
-    for i in range(max_retries):
-        logger.info("Polling Gemini file status (it=%d/%d): %s", i+1, max_retries, file_name_api)
-        status = client.get_file_status(file_name_api)
-        state = status.get("state")
-        if state == "ACTIVE":
-            break
-        if state == "FAILED":
-            raise IngestionError(f"Gemini video processing failed: {status}")
-        time.sleep(30)
-    else:
-        raise IngestionError("Gemini video processing timed out after 100 attempts")
-
-    # 3. Generate timestamped summary
-    logger.info("Generating timestamped summary for %s", file_name)
-    system_prompt = (
-        "あなたは動画解析アシスタントです。提供された動画の内容を詳しく解析し、"
-        "重要な場面ごとにその内容を要約してください。\n"
-        "出力形式は必ず [MM:SS] 要約テキスト の形式にしてください。\n"
-        "例: [00:15] 導入部分。講師が登場し、本日のアジェンダを説明する。"
-    )
-    user_prompt = "この動画の内容を時系列順に詳しく要約してください。"
-
-    raw_summary = client.generate_content(
-        model=settings.pdf_ocr_model,  # Reusing the OCR model setting (e.g. gemini-2.0-flash)
-        system_instruction=system_prompt,
-        user_prompt=user_prompt,
-        file_uri=file_uri,
-        mime_type=mime_type,
-    )
-
-    # 4. Parse timestamps
-    blocks: list[TextBlock] = []
-    # Regex to match [MM:SS] or [HH:MM:SS]
-    pattern = re.compile(r"\[(\d{1,2}:)?(\d{1,2}):(\d{2})\]\s*(.*)")
-    
-    for line in raw_summary.splitlines():
-        match = pattern.search(line.strip())
-        if match:
-            h, m, s, text = match.groups()
-            seconds = int(m) * 60 + int(s)
-            if h:
-                seconds += int(h.rstrip(":")) * 3600
-            blocks.append(TextBlock(text=text.strip(), page=seconds, section_title=None))
-    
-    if not blocks:
-        # Fallback if parsing failed
-        blocks.append(TextBlock(text=raw_summary, page=0, section_title=None))
-
-    return ParseResult(
-        page_count=None,
-        extracted_pages=1,
-        failed_pages=[],
-        ocr_used_pages=[],
-        tags=["VIDEO_SOURCE"],
         blocks=blocks,
     )
 
@@ -441,6 +362,23 @@ def _extract_page_text_via_ocr(page: Any, client: GeminiClient, model: str) -> s
     return ocr_text.strip()
 
 
+def _extract_pdf_text_via_gemini_document(data: bytes, client: GeminiClient, model: str) -> str:
+    try:
+        text = client.extract_text_from_pdf(
+            model=model,
+            data=data,
+            prompt=(
+                "このPDFの本文を日本語テキストとして正確に抽出してください。"
+                "手順、見出し、箇条書き、注意点をできるだけ保持し、要約ではなく抽出結果を返してください。"
+            ),
+        )
+    except GeminiApiError as exc:
+        logger.warning("Gemini PDF OCR failed: %s", exc)
+        return ""
+
+    return text.strip()
+
+
 def _extract_page_images_for_ocr(page: Any) -> list[tuple[str, bytes]]:
     page_images = getattr(page, "images", None)
     if not page_images:
@@ -521,130 +459,137 @@ def _split_text(text: str, max_chars: int) -> list[str]:
 
 
 def _is_garbage_text(text: str) -> bool:
-    """文字化け（mojibake）や抽出失敗を判定する簡易的な判定ロジック。
-    制御文字や特殊記号の割合が高い場合にTrueを返す。
-    """
-    if not text:
-        return False
-
-    # 日本語/英語/数字/一般的な記号以外の割合をチェック
-    total = len(text)
-    legit_pattern = re.compile(
-        r"[a-zA-Z0-9\s"
-        r"\u3040-\u309F"  # 平仮名
-        r"\u30A0-\u30FF"  # 片仮名
-        r"\u4E00-\u9FFF"  # 漢字
-        r"\uFF01-\uFF5E"  # 全角記号
-        r"\u0020-\u007E"  # 半角記号
-        r"、。！？「」ー]"
-    )
-    legit_count = len(legit_pattern.findall(text))
-
-    if total == 0:
-        return False
-
-    legit_ratio = legit_count / total
-    # 正常な文字が50%以下の場合はゴミとみなす（経験則）
-    return legit_ratio < 0.5
+    """文字化けや抽出失敗らしいテキストを判定する。"""
+    return is_probably_garbled_text(text)
 
 
-def _extract_pdf_text_via_gemini_file_api(data: bytes, client: GeminiClient, model: str) -> str:
-    """PDF自体をGemini File APIにアップロードして内容を抽出する"""
-    try:
-        f_info = client.upload_file(data, "application/pdf", "temp_ingest_pdf.pdf")
-        f_name = f_info["name"]
+def _load_source_bytes(document: Document, storage: StorageService) -> bytes:
+    if not document.storage_key.startswith("drive://"):
+        return storage.download_bytes(document.storage_key)
 
-        # Wait for processing
-        for _ in range(10):
-            status = client.get_file_status(f_name)
-            state = status.get("state")
-            if state == "ACTIVE":
-                break
-            if state == "FAILED":
-                logger.error("Gemini PDF processing failed: %s", status)
-                return ""
-            time.sleep(2)
-        else:
-            logger.warning("Gemini PDF processing timed out.")
-            return ""
+    drive_file_id = document.storage_key.removeprefix("drive://")
+    normalized_mime = (document.mime_type or "").lower()
+    ext = Path(document.file_name).suffix.lower()
 
-        text = client.generate_content(
-            model=model,
-            system_instruction="あなたは優秀なドキュメント解析アシスタントです。",
-            user_prompt=(
-                "このPDFファイルの内容をすべてテキストとして抽出してください。"
-                "表や図の中に含まれる文字も漏らさず抽出してください。"
-                "推測や要約はせず、書いてある内容だけを正確に返してください。"
-            ),
-            file_uri=status.get("uri"),
-            mime_type="application/pdf",
-        )
-        return text
-    except Exception as e:
-        logger.error("Error in Gemini native PDF parsing: %s", e)
-        return ""
+    if normalized_mime.startswith("video/") or ext in {".mp4", ".mov", ".avi", ".mkv", ".m4v", ".webm"}:
+        logger.info("Skipping Drive download for video ingestion and using metadata only: %s", document.file_name)
+        return b""
 
-def import_from_drive_job(
-    workspace_id: str,
-    folder_id: str,
-    gemini_api_key: str | None = None,
-) -> None:
-    """Google Driveフォルダ内のファイルをスキャンしてDBに登録する"""
-    from app.db import SessionLocal
-    from app.models import Document, DocumentStatus
-    from app.services.drive_service import DriveService
-    from app.services.queue import enqueue_ingestion
-    from app.config import get_settings
-    import json
-
-    db = SessionLocal()
     settings = get_settings()
+    service_account_path = settings.google_drive_service_account_path
+    if not service_account_path:
+        raise IngestionError("Google Drive service account path is not configured")
+
     try:
-        # workspace_idを安全にUUIDに変換
-        if isinstance(workspace_id, str):
-            wid = uuid.UUID(workspace_id)
-        else:
-            wid = workspace_id
+        with open(service_account_path, "r", encoding="utf-8") as handle:
+            service_account_info = json.load(handle)
+    except (OSError, ValueError) as exc:
+        raise IngestionError(f"Google Drive service account could not be read: {exc}") from exc
 
-        logger.info("Starting import_from_drive_job. workspace_id=%s", wid)
-        sa_path = settings.google_drive_service_account_path
-        if not sa_path:
-            logger.error("GOOGLE_DRIVE_SERVICE_ACCOUNT_PATH is not set")
+    drive = DriveService(service_account_info)
+    return drive.download_file_to_memory(drive_file_id)
+
+
+def process_document_ingestion(doc_id: str, gemini_api_key: str | None = None) -> None:
+    settings = get_settings()
+    db = SessionLocal()
+    try:
+        document = db.get(Document, uuid.UUID(doc_id))
+        if not document:
+            logger.error("Document %s not found for ingestion", doc_id)
             return
-            
-        with open(sa_path, "r") as f:
-            sa_info = json.load(f)
-            
-        drive = DriveService(sa_info)
-        files = drive.list_files_in_folder(folder_id)
-        logger.info("Found %d files in Drive folder %s", len(files), folder_id)
 
-        for f in files:
-            # すでに登録済みか確認
-            storage_key = f"drive://{f['id']}"
-            existing = db.query(Document).filter(Document.storage_key == storage_key).first()
-            if existing:
-                continue
+        document.status = DocumentStatus.processing
+        db.commit()
 
-            doc = Document(
-                id=uuid.uuid4(),
-                workspace_id=wid,
-                file_name=f['name'],
-                mime_type=f['mimeType'],
-                storage_key=storage_key,
-                status=DocumentStatus.processing,
-                tags=["google-drive"],
+        storage = StorageService()
+        data = _load_source_bytes(document, storage)
+
+        # Start ingestion run record
+        run = IngestionRun(document_id=document.id)
+        db.add(run)
+        db.commit()
+
+        try:
+            result = parse_document(
+                document.file_name,
+                document.mime_type,
+                data,
+                gemini_api_key_override=gemini_api_key,
             )
-            db.add(doc)
-            db.commit()
-            
-            # 各ファイルのインポートジョブをキューに追加
-            enqueue_ingestion(str(doc.id), gemini_api_key=gemini_api_key)
-            logger.info("Enqueued ingestion for Drive file: %s", f['name'])
 
-    except Exception as e:
-        import traceback
-        logger.error("Failed to import from Drive: %s", e)
-        logger.error(traceback.format_exc())
+            chunks = build_chunks(result.blocks)
+
+            db.query(Chunk).filter(Chunk.document_id == document.id).delete()
+
+            # Embedding
+            if chunks:
+                embedder = EmbeddingService(gemini_api_key=gemini_api_key)
+                texts = [c.text for c in chunks]
+                embeddings = embedder.embed_texts(texts)
+
+                if any(not any(value != 0.0 for value in vector) for vector in embeddings):
+                    document.tags = sorted(set((document.tags or []) + ["EMBED_FALLBACK"]))
+
+                for i, (chunk_payload, embedding) in enumerate(zip(chunks, embeddings)):
+                    chunk = Chunk(
+                        id=uuid.uuid4(),
+                        workspace_id=document.workspace_id,
+                        document_id=document.id,
+                        chunk_index=chunk_payload.chunk_index,
+                        text=chunk_payload.text,
+                        page_start=chunk_payload.page_start,
+                        page_end=chunk_payload.page_end,
+                        section_title=chunk_payload.section_title,
+                        snippet=chunk_payload.snippet,
+                        embedding=embedding,
+                        fts=func.to_tsvector("simple", chunk_payload.text),
+                    )
+                    db.add(chunk)
+
+            document.status = DocumentStatus.ready
+            document.page_count = result.page_count
+            document.tags = sorted(set((document.tags or []) + result.tags))
+            document.fail_reason = None
+
+            run.finished_at = datetime.now()
+            run.extracted_pages = result.extracted_pages
+            run.failed_pages = result.failed_pages
+            run.failed_pages_count = len(result.failed_pages)
+            run.ocr_used_pages = result.ocr_used_pages
+            run.chunk_count = len(chunks)
+
+        except Exception as exc:
+            db.rollback()
+            logger.exception("Ingestion failed for document %s", doc_id)
+            document = db.get(Document, document.id) or document
+            run = db.get(IngestionRun, run.id) if run and run.id else run
+            document.status = DocumentStatus.failed
+            document.fail_reason = str(exc)
+            if run:
+                run.finished_at = datetime.now()
+                run.log = {"error": str(exc)}
+
+        db.commit()
     finally:
         db.close()
+
+
+def _parse_video(
+    file_name: str,
+    mime_type: str,
+    data: bytes,
+    gemini_api_key_override: str | None = None,
+) -> ParseResult:
+    # コスト削減のため、Geminiによる動画解析をスキップし、ファイル名のみをコンテンツとして保持します。
+    # これによりリンクの提供は可能にしつつ、API料金を0に抑えます。
+    logger.info("Video ingestion (lightweight mode): %s", file_name)
+
+    return ParseResult(
+        page_count=None,
+        extracted_pages=1,
+        failed_pages=[],
+        ocr_used_pages=[],
+        tags=["VIDEO_CONTENT", "TITLE_ONLY"],
+        blocks=[TextBlock(text=f"Video Title: {file_name}", page=None, section_title="Video Information")],
+    )
