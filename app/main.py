@@ -1,17 +1,21 @@
 from __future__ import annotations
 
-from fastapi import FastAPI, Body
+from fastapi import FastAPI, Body, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 
 from app.config import get_settings
 from app.logging import setup_logging
 from app.routers import chat, documents, workspaces
+from app.dependencies import verify_clinic_key
 
 setup_logging()
 settings = get_settings()
 
-app = FastAPI(title=settings.app_name)
+app = FastAPI(
+    title=settings.app_name,
+    dependencies=[Depends(verify_clinic_key)] if settings.clinic_password else []
+)
 
 app.add_middleware(
     CORSMiddleware,

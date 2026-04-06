@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
+import { AuthGuard } from "@/components/auth-guard";
 import { ApiKeySettingsFab } from "@/components/api-key-settings-fab";
 import { Toaster } from "@/components/ui/toaster";
 
@@ -21,9 +22,11 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      {children}
-      <ApiKeySettingsFab />
-      <Toaster />
+      <AuthGuard>
+        {children}
+        <ApiKeySettingsFab />
+        <Toaster />
+      </AuthGuard>
     </QueryClientProvider>
   );
 }

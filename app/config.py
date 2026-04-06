@@ -11,6 +11,7 @@ class Settings(BaseSettings):
 
     app_name: str = "Universal RAG PoC"
     environment: str = "development"
+    clinic_password: str | None = None
 
     database_url: str = "postgresql+psycopg://postgres:postgres@postgres:5432/rag"
     redis_url: str = "redis://redis:6379/0"

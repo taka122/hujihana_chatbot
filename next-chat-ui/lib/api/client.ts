@@ -11,6 +11,7 @@ import type {
 } from "@/lib/api/types";
 
 import { getStoredApiKey } from "@/lib/api-key-store";
+import { getClinicKey } from "@/lib/auth";
 
 const API_PROXY_PREFIX = "/api/backend";
 
@@ -30,12 +31,17 @@ function resolveUrl(path: string): string {
   return `${API_PROXY_PREFIX}${path}`;
 }
 
-function getApiKeyHeaders(): Record<string, string> {
+function getAuthHeaders(): Record<string, string> {
   const headers: Record<string, string> = {};
 
   const apiKey = getStoredApiKey();
   if (apiKey) {
     headers["X-GEMINI-API-Key"] = apiKey;
+  }
+
+  const clinicKey = getClinicKey();
+  if (clinicKey) {
+    headers["X-Clinic-Key"] = clinicKey;
   }
 
   return headers;
@@ -50,14 +56,14 @@ async function parseResponse<T>(response: Response): Promise<T> {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const apiHeaders = getApiKeyHeaders();
+  const authHeaders = getAuthHeaders();
   let response: Response;
   try {
     response = await fetch(resolveUrl(path), {
       ...init,
       headers: {
         "Content-Type": "application/json",
-        ...apiHeaders,
+        ...authHeaders,
         ...(init?.headers ?? {})
       },
       cache: "no-store"
@@ -236,14 +242,14 @@ export async function uploadDoc(
   file: File,
   onProgress?: (percent: number) => void
 ): Promise<UploadResponse> {
-  const apiKeyHeaders = getApiKeyHeaders();
+  const authHeaders = getAuthHeaders();
   return new Promise<UploadResponse>((resolve, reject) => {
     const formData = new FormData();
     formData.append("file", file);
 
     const xhr = new XMLHttpRequest();
     xhr.open("POST", resolveUrl(`/api/workspaces/${workspaceId}/docs/upload`));
-    Object.entries(apiKeyHeaders).forEach(([header, value]) => {
+    Object.entries(authHeaders).forEach(([header, value]) => {
       xhr.setRequestHeader(header, value);
     });
 
@@ -311,7 +317,7 @@ export async function fetchSourcePreview(
   ref: string
 ): Promise<SourcePreview> {
   const encodedRef = encodeURIComponent(ref);
-  const authHeaders = getApiKeyHeaders();
+  const authHeaders = getAuthHeaders();
   let response = await fetch(resolveUrl(`/api/workspaces/${workspaceId}/docs/${docId}/preview?ref=${encodedRef}`), {
     headers: authHeaders,
     cache: "no-store"
