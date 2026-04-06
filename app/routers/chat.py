@@ -14,6 +14,7 @@ from app.schemas import ChatQueryRequest, ChatQueryResponse
 from app.services.answer import AnswerService
 from app.services.embed import EmbeddingService
 from app.services.retrieve import hybrid_retrieve
+from app.services.storage import StorageService
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +63,13 @@ def query_chat(
             result.citations = [item for item in result.citations if item["chunk_id"] in valid_ids]
             if not result.citations:
                 result = answer_service.not_found()
+            else:
+                # Generate presigned URLs for citations
+                storage = StorageService()
+                for item in result.citations:
+                    skey = item.get("storage_key")
+                    if skey:
+                        item["url"] = storage.generate_presigned_get_url(skey)
 
         return ChatQueryResponse(answer=result.answer, citations=result.citations)
     except Exception as exc:  # noqa: BLE001

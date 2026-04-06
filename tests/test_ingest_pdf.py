@@ -102,6 +102,38 @@ class ParsePdfTest(unittest.TestCase):
         self.assertIn("OCR_USED", result.tags)
         self.assertEqual(result.blocks[1].text, "注意事項")
 
+    def test_garbled_text_without_ocr_is_not_kept(self) -> None:
+        garbled = "ʷɹɹɹܭ ͓௼Γમ 1BZ-JHIU ͨ͠΋ͷ͕ड෇ͷਅΜத"
+        pages = [
+            FakePage("A" * 100),
+            FakePage(garbled),
+        ]
+
+        result = self.run_parse(pages, settings=build_settings(gemini_api_key=None))
+
+        self.assertEqual(result.extracted_pages, 1)
+        self.assertEqual(result.failed_pages, [{"page": 2, "reason": "image_only_or_no_text"}])
+        self.assertEqual([block.page for block in result.blocks], [1])
+
+    def test_garbled_text_prefers_ocr_result(self) -> None:
+        garbled = "ʷɹɹɹܭ ͓௼Γમ 1BZ-JHIU ͨ͠΋ͷ͕ड෇ͷਅΜத"
+        pages = [
+            FakePage("A" * 100),
+            FakePage(garbled),
+        ]
+
+        result = self.run_parse(
+            pages,
+            settings=build_settings(gemini_api_key="dummy-key"),
+            ocr_by_page={pages[1]: "朝の準備では、釣り銭と予約表を確認します。"},
+        )
+
+        self.assertEqual(result.extracted_pages, 2)
+        self.assertEqual(result.failed_pages, [])
+        self.assertEqual(result.ocr_used_pages, [2])
+        self.assertIn("OCR_USED", result.tags)
+        self.assertEqual(result.blocks[1].text, "朝の準備では、釣り銭と予約表を確認します。")
+
 
 if __name__ == "__main__":
     unittest.main()

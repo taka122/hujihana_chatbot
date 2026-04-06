@@ -1,7 +1,7 @@
 import codecs
 import unittest
 
-from app.services.text_decode import decode_text_bytes, extract_charset_from_mime
+from app.services.text_decode import decode_text_bytes, extract_charset_from_mime, is_probably_garbled_text
 
 
 class TextEncodingTest(unittest.TestCase):
@@ -28,6 +28,14 @@ class TextEncodingTest(unittest.TestCase):
         decoded = decode_text_bytes(b"\x81")
         self.assertTrue(decoded.had_replacements)
         self.assertIn("DECODE_REPLACED", decoded.tags)
+
+    def test_garbled_pdf_text_is_detected(self) -> None:
+        garbled = "ʷɹɹɹܭ ͓௼Γમ 1BZ-JHIU ͨ͠΋ͷ͕ड෇ͷਅΜத"
+        self.assertTrue(is_probably_garbled_text(garbled))
+
+    def test_normal_japanese_text_is_not_flagged(self) -> None:
+        normal = "朝の準備では、予約表と釣り銭を確認します。"
+        self.assertFalse(is_probably_garbled_text(normal))
 
 if __name__ == "__main__":
     unittest.main()

@@ -7,6 +7,17 @@ from dataclasses import dataclass
 
 _CHARSET_RE = re.compile(r"charset\s*=\s*['\"]?([a-zA-Z0-9._\-]+)", re.IGNORECASE)
 _MOJIBAKE_PATTERN_RE = re.compile(r"(?:Ã.|Â.|ã.|â.|ð.|�)")
+_ALLOWED_TEXT_RE = re.compile(
+    r"[a-zA-Z0-9\s"
+    r"\u3040-\u309F"  # 平仮名
+    r"\u30A0-\u30FF"  # 片仮名
+    r"\u4E00-\u9FFF"  # 漢字
+    r"\uFF01-\uFF5E"  # 全角記号
+    r"\u0020-\u007E"  # 半角記号
+    r"\u3000-\u303F"  # CJK punctuation
+    r"、。！？「」ー]"
+)
+_SUSPICIOUS_SCRIPT_RE = re.compile(r"[\u0250-\u02AF\u0370-\u03FF\u0590-\u06FF\u0900-\u0D7F]")
 
 
 @dataclass(frozen=True)
@@ -122,6 +133,28 @@ def _decode_quality_score(text: str) -> int:
     mojibake_hits = len(_MOJIBAKE_PATTERN_RE.findall(text))
     # lower is better
     return (control_chars * 20) + (zero_bytes * 30) + (mojibake_hits * 8)
+
+
+def is_probably_garbled_text(text: str) -> bool:
+    if not text:
+        return False
+
+    if _looks_like_mojibake(text):
+        return True
+
+    total = max(len(text), 1)
+    allowed = len(_ALLOWED_TEXT_RE.findall(text))
+    suspicious = len(_SUSPICIOUS_SCRIPT_RE.findall(text))
+    control_chars = sum(1 for ch in text if ord(ch) < 32 and ch not in "\n\r\t")
+
+    allowed_ratio = allowed / total
+    suspicious_ratio = suspicious / total
+
+    if control_chars > 0 and allowed_ratio < 0.85:
+        return True
+    if suspicious >= 4 and suspicious_ratio >= 0.05:
+        return True
+    return allowed_ratio < 0.45
 
 
 def _looks_like_mojibake(text: str) -> bool:

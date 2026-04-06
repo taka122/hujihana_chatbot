@@ -57,6 +57,17 @@ class UploadResponse(BaseModel):
     doc_id: uuid.UUID
 
 
+class DriveImportRequest(BaseModel):
+    folder_url: str = Field(min_length=1, max_length=2048)
+
+
+class DriveImportResponse(BaseModel):
+    folder_id: str
+    queued_count: int
+    skipped_count: int
+    doc_ids: list[uuid.UUID] = Field(default_factory=list)
+
+
 class ChunkResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -88,11 +99,12 @@ class ChatAnswerPayload(BaseModel):
 class ChatCitation(BaseModel):
     doc_id: uuid.UUID
     file_name: str
-    ref_type: Literal["page", "slide", "sheet"]
+    ref_type: Literal["page", "slide", "sheet", "video"]
     ref: str
     snippet: str
     score: float | None
     chunk_id: uuid.UUID
+    url: str | None = None
 
 
 class ChatQueryResponse(BaseModel):

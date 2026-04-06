@@ -25,23 +25,22 @@ class Settings(BaseSettings):
     s3_presign_expire_sec: int = 3600
 
     embedding_provider: Literal["gemini"] = "gemini"
-    embedding_model: str = "gemini-embedding-001"
-    embedding_dim: int = 1536
+    embedding_model: str = "embedding-001"
+    embedding_dim: int = 768
 
     llm_provider: Literal["gemini"] = "gemini"
     llm_model: str = "gemini-2.0-flash"
     gemini_api_key: str | None = None
     gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta"
-    
-    google_drive_service_account_path: str | None = "service-account.json"
-    google_drive_service_account_info: str | None = None  # JSON string as an alternative to file path
+
+    google_drive_service_account_path: str | None = None
 
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
 
     vector_top_k: int = 30
     keyword_top_k: int = 30
-    answer_context_chunks: int = 8
-    retrieval_score_threshold: float = 0.25
+    answer_context_chunks: int = 12
+    retrieval_score_threshold: float = 0.15
 
     chunk_size_chars: int = 4200
     chunk_overlap_chars: int = 500

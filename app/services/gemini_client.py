@@ -19,31 +19,35 @@ class GeminiClient:
         self._api_key = api_key
         self._base_url = base_url.rstrip("/")
 
-    def embed_query(self, model: str, query: str) -> list[float]:
+    def embed_query(self, model: str, query: str, dimension: int | None = None) -> list[float]:
         payload = {
             "model": f"models/{model}",
             "taskType": "RETRIEVAL_QUERY",
             "content": {"parts": [{"text": query}]},
         }
+        if dimension:
+            payload["outputDimensionality"] = dimension
+
         data = self._post(f"models/{model}:embedContent", payload)
         vector = data.get("embedding", {}).get("values", [])
         if not vector:
             raise GeminiApiError("Gemini query embedding is empty")
         return [float(v) for v in vector]
 
-    def embed_documents(self, model: str, texts: list[str]) -> list[list[float]]:
+    def embed_documents(self, model: str, texts: list[str], dimension: int | None = None) -> list[list[float]]:
         if not texts:
             return []
         requests: list[dict[str, Any]] = []
         for index, text in enumerate(texts):
-            requests.append(
-                {
-                    "model": f"models/{model}",
-                    "taskType": "RETRIEVAL_DOCUMENT",
-                    "title": f"chunk-{index}",
-                    "content": {"parts": [{"text": text}]},
-                }
-            )
+            req = {
+                "model": f"models/{model}",
+                "taskType": "RETRIEVAL_DOCUMENT",
+                "title": f"chunk-{index}",
+                "content": {"parts": [{"text": text}]},
+            }
+            if dimension:
+                req["outputDimensionality"] = dimension
+            requests.append(req)
 
         payload = {"requests": requests}
         data = self._post(f"models/{model}:batchEmbedContents", payload)
@@ -54,21 +58,10 @@ class GeminiClient:
             )
         return [[float(v) for v in item.get("values", [])] for item in embeddings]
 
-    def generate_content(
-        self,
-        model: str,
-        system_instruction: str,
-        user_prompt: str,
-        file_uri: str | None = None,
-        mime_type: str | None = None,
-    ) -> str:
-        parts: list[dict[str, Any]] = [{"text": user_prompt}]
-        if file_uri and mime_type:
-            parts.insert(0, {"file_data": {"mime_type": mime_type, "file_uri": file_uri}})
-
+    def generate_content(self, model: str, system_instruction: str, user_prompt: str) -> str:
         payload = {
             "system_instruction": {"parts": [{"text": system_instruction}]},
-            "contents": [{"role": "user", "parts": parts}],
+            "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
             "generationConfig": {"temperature": 0.0},
         }
         data = self._post(f"models/{model}:generateContent", payload)
@@ -113,123 +106,108 @@ class GeminiClient:
                     return text.strip()
         raise GeminiApiError("Gemini OCR returned no text candidates")
 
-    def upload_file(self, content: bytes, mime_type: str, display_name: str) -> dict[str, Any]:
-        """Uploads a file to Gemini File API (v1beta)."""
-        url = f"https://generativelanguage.googleapis.com/upload/v1beta/files?key={self._api_key}"
-        
-        # Simple upload format for simplicity, though resumable is recommended for large files.
-        # For this PoC, we use the non-resumable simple upload if possible.
-        # If it needs metadata, we should use resumable. 
-        # Here we do a two-step resumable-like approach or just provide metadata in headers.
-        
-        metadata = {"file": {"display_name": display_name}}
-        body = json.dumps(metadata).encode("utf-8")
-        
-        # 1. Initiate upload
-        init_request = urllib.request.Request(
+    def extract_text_from_pdf(
+        self,
+        model: str,
+        data: bytes,
+        prompt: str = (
+            "このPDFの本文テキストをできるだけ正確に抽出してください。"
+            "要約ではなく、手順・見出し・箇条書きを保ちながら日本語テキストとして返してください。"
+        ),
+    ) -> str:
+        if not data:
+            return ""
+
+        payload = {
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [
+                        {"text": prompt},
+                        {
+                            "inline_data": {
+                                "mime_type": "application/pdf",
+                                "data": base64.b64encode(data).decode("ascii"),
+                            }
+                        },
+                    ],
+                }
+            ],
+            "generationConfig": {"temperature": 0.0},
+        }
+        data_resp = self._post(f"models/{model}:generateContent", payload)
+        for candidate in data_resp.get("candidates", []):
+            content = candidate.get("content", {})
+            for part in content.get("parts", []):
+                text = part.get("text")
+                if text and text.strip():
+                    return text.strip()
+        raise GeminiApiError("Gemini PDF extraction returned no text candidates")
+
+    def extract_text_from_video(
+        self,
+        model: str,
+        mime_type: str,
+        data: bytes,
+        prompt: str = (
+            "この動画の内容（音声およびキーとなる映像）の文字起こしをしてください。"
+            "発言内容を詳細なテキスト形式で出力し、重要な視覚情報（字幕や特定のシーンの説明）があれば追記してください。"
+            "要約ではなく、可能な限り忠実な文字起こしを目指してください。"
+        ),
+    ) -> str:
+        if not data:
+            return ""
+
+        payload = {
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [
+                        {"text": prompt},
+                        {
+                            "inline_data": {
+                                "mime_type": mime_type,
+                                "data": base64.b64encode(data).decode("ascii"),
+                            }
+                        },
+                    ],
+                }
+            ],
+            "generationConfig": {"temperature": 0.0},
+        }
+
+        # note: Use a longer timeout for video processing as it takes more time
+        data_resp = self._post(f"models/{model}:generateContent", payload)
+        for candidate in data_resp.get("candidates", []):
+            content = candidate.get("content", {})
+            for part in content.get("parts", []):
+                text = part.get("text")
+                if text and text.strip():
+                    return text.strip()
+        raise GeminiApiError("Gemini video extraction returned no text candidates")
+
+    def _post(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
+        url = f"{self._base_url}/{path}"
+        request = urllib.request.Request(
             url=url,
             method="POST",
-            data=body,
+            data=json.dumps(payload).encode("utf-8"),
             headers={
-                "X-Goog-Upload-Protocol": "resumable",
-                "X-Goog-Upload-Command": "start",
-                "X-Goog-Upload-Header-Content-Length": str(len(content)),
-                "X-Goog-Upload-Header-Content-Type": mime_type,
-                "Content-Type": "application/json",
-            },
-        )
-        
-        try:
-            with urllib.request.urlopen(init_request) as resp:
-                upload_url = resp.headers.get("X-Goog-Upload-URL")
-        except urllib.error.HTTPError as exc:
-            body = exc.read().decode("utf-8", errors="ignore")
-            raise GeminiApiError(f"Gemini File Init Error {exc.code}: {body}") from exc
-
-        if not upload_url:
-            raise GeminiApiError("Failed to get upload URL from Gemini")
-
-        # 2. Upload actual data
-        data_request = urllib.request.Request(
-            url=upload_url,
-            method="POST",
-            data=content,
-            headers={
-                "X-Goog-Upload-Protocol": "resumable",
-                "X-Goog-Upload-Command": "upload, finalize",
-                "X-Goog-Upload-Offset": "0",
-                "Content-Length": str(len(content)),
-            },
-        )
-        
-        try:
-            with urllib.request.urlopen(data_request) as resp:
-                raw = resp.read().decode("utf-8")
-                return json.loads(raw).get("file", {})
-        except urllib.error.HTTPError as exc:
-            body = exc.read().decode("utf-8", errors="ignore")
-            raise GeminiApiError(f"Gemini File Upload Error {exc.code}: {body}") from exc
-
-    def get_file_status(self, name: str) -> dict[str, Any]:
-        """Gets file status (e.g. processing state). name format is 'files/...'"""
-        data = self._post(name, payload={}, method="GET")
-        return data
-
-    def _post(self, path: str, payload: dict[str, Any], method: str = "POST") -> dict[str, Any]:
-        import time
-        import random
-        
-        url = (
-            f"{self._base_url}/{path}"
-            if "?" in path
-            else f"{self._base_url}/{path}?key={self._api_key}"
-        )
-        
-        # We handle the key in the URL for consistency with File API if needed, 
-        # but usually it's in the header. Let's stick to header if not specified in path.
-        if "key=" in path:
-            url = f"{self._base_url}/{path}"
-            headers = {"Content-Type": "application/json"}
-        else:
-            url = f"{self._base_url}/{path}"
-            headers = {
                 "Content-Type": "application/json",
                 "x-goog-api-key": self._api_key,
-            }
+            },
+        )
 
-        data_bytes = json.dumps(payload).encode("utf-8") if payload else None
-        
-        max_retries = 10
-        for attempt in range(max_retries):
-            request = urllib.request.Request(
-                url=url,
-                method=method,
-                data=data_bytes,
-                headers=headers,
-            )
+        try:
+            with urllib.request.urlopen(request, timeout=60) as response:
+                raw = response.read().decode("utf-8")
+        except urllib.error.HTTPError as exc:
+            body = exc.read().decode("utf-8", errors="ignore")
+            raise GeminiApiError(f"Gemini API HTTP {exc.code}: {body}") from exc
+        except urllib.error.URLError as exc:
+            raise GeminiApiError(f"Gemini API connection error: {exc}") from exc
 
-            try:
-                with urllib.request.urlopen(request, timeout=120) as response:
-                    raw = response.read().decode("utf-8")
-                    parsed = json.loads(raw)
-                    if "error" in parsed:
-                        # Sometimes errors are in the body even with 200 (not common in Gemini but safe)
-                        raise GeminiApiError(str(parsed["error"]))
-                    return parsed
-            except urllib.error.HTTPError as exc:
-                body = exc.read().decode("utf-8", errors="ignore")
-                # 429: Rate Limit, 500/503: Server Error - these are retryable
-                if exc.code in {429, 500, 503} and attempt < max_retries - 1:
-                    wait_time = (2 ** attempt) + random.random()
-                    logger.warning("Gemini API error %d. Retrying in %.2fs... (attempt %d/%d)", 
-                                   exc.code, wait_time, attempt + 1, max_retries)
-                    time.sleep(wait_time)
-                    continue
-                raise GeminiApiError(f"Gemini API HTTP {exc.code}: {body}") from exc
-            except urllib.error.URLError as exc:
-                if attempt < max_retries - 1:
-                    time.sleep(2)
-                    continue
-                raise GeminiApiError(f"Gemini API connection error: {exc}") from exc
-        
-        raise GeminiApiError("Max retries exceeded")
+        parsed = json.loads(raw)
+        if "error" in parsed:
+            raise GeminiApiError(str(parsed["error"]))
+        return parsed

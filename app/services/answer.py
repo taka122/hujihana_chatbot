@@ -76,6 +76,7 @@ class AnswerService:
                     f"[chunk_id={item.chunk_id}]\n"
                     f"file_name={item.file_name}\n"
                     f"ref={item.ref}\n"
+                    f"score={item.score:.3f}\n"
                     f"snippet={item.snippet}\n"
                     f"text={item.text[:2400]}"
                 )
@@ -84,16 +85,27 @@ class AnswerService:
         )
 
         system_prompt = (
-            "あなたはRAG回答器です。\n"
-            "- ソースに書いていないことを断定しない\n"
-            "- 引用のない断定は禁止\n"
-            "- citationsには必ずchunk_idを入れる\n"
-            "- JSONのみを返す\n"
-            "- JSON以外の説明文を付けない"
+            "あなたは業務文書・動画要約用の高精度RAG回答器です。\n"
+            "- 与えられたcontextsだけを根拠に、日本語で正確かつ実務で使える回答を作成してください。\n"
+            "- 提供されたすべての資料断片を漏れなく確認し、重複する内容は統合してください。\n"
+            "- 異なる手順、例外条件、注意点、担当ごとの差分があれば省略せずすべて含めてください。\n"
+            "- 動画タイトルや動画由来の記述も、質問に関連する場合はPDFや文書と同様に回答へ反映してください。\n"
+            "- 特に answer.details は、その欄だけ読めば業務を進められるレベルの完全な説明にしてください。\n"
+            "- details では、手順を順番に整理し、条件分岐・必要書類・注意事項・補足を分かりやすく構造化してください。\n"
+            "- ソースにない情報は補完せず、『不明』『資料記載なし』と明示してください。\n"
+            "- citations には、回答作成に使った根拠の chunk_id を漏れなくすべて含めてください。\n"
+            "- JSON形式のみを返し、前後の説明文やコードブロックは一切付けないでください。"
         )
         user_prompt = (
             f"query:\n{query}\n\n"
+            f"contexts_count: {len(contexts)}\n\n"
             f"contexts:\n{context_text}\n\n"
+            "出力方針:\n"
+            "1. conclusion は最重要の結論を短く明快にまとめる。\n"
+            "2. details は参照資料を統合した完全版の手順・要点説明にする。\n"
+            "3. 重複はまとめるが、資料ごとに異なる点や追加条件は落とさない。\n"
+            "4. notes には前提条件、不明点、参照時の注意を簡潔に書く。\n"
+            "5. next_actions には利用者が次に取るべき行動を最大3件で書く。\n\n"
             "以下のJSONスキーマに厳密準拠して返答してください:\n"
             "{\n"
             "  \"answer\": {\n"
@@ -134,7 +146,7 @@ class AnswerService:
 
     def _mock_answer(self, query: str, contexts: list[RetrievedChunk]) -> AnswerResult:
         # LLM unavailable時の安全フォールバック。断定せず、引用ベースの要約だけ返す。
-        top = contexts[: min(3, len(contexts))]
+        top = contexts[: min(12, len(contexts))]
         details = "\n".join([f"- {item.file_name} {item.ref}: {item.snippet}" for item in top])
         answer = {
             "conclusion": "該当しうる情報をソースから抽出しました。断定が必要な場合は原文確認が必要です。",
@@ -169,6 +181,8 @@ class AnswerService:
             "snippet": item.snippet,
             "score": item.score,
             "chunk_id": item.chunk_id,
+            "storage_key": item.storage_key,
+            "mime_type": item.mime_type,
         }
 
 
