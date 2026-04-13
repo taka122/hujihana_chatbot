@@ -40,6 +40,7 @@ export type Citation = {
   score: number | null;
   chunk_id?: string;
   mime_type?: string;
+  url?: string;
 };
 
 export type ChatAnswer = {

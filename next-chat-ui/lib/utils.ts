@@ -49,3 +49,28 @@ export function extractTimestamp(ref: string): number | null {
   }
   return null;
 }
+
+export function isGoogleDriveUrl(url?: string | null): boolean {
+  return typeof url === "string" && url.includes("drive.google.com");
+}
+
+export function toDownloadUrl(url: string): string {
+  try {
+    if (!isGoogleDriveUrl(url)) {
+      return url;
+    }
+
+    const parsed = new URL(url);
+    const fileIdFromPath = parsed.pathname.match(/\/file\/d\/([^/]+)/)?.[1];
+    const fileIdFromQuery = parsed.searchParams.get("id");
+    const fileId = fileIdFromPath ?? fileIdFromQuery;
+
+    if (!fileId) {
+      return url;
+    }
+
+    return `https://drive.google.com/uc?export=download&id=${encodeURIComponent(fileId)}`;
+  } catch {
+    return url;
+  }
+}

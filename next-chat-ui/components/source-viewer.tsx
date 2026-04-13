@@ -1,14 +1,20 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { ExternalLink, FileText, Loader2, Video } from "lucide-react";
+import { Download, ExternalLink, FileText, Loader2, Video } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { Citation } from "@/lib/api/types";
 import { useSourcePreview } from "@/lib/hooks/use-source-preview";
-import { extractPageNumber, extractTimestamp, withPageAnchor } from "@/lib/utils";
+import {
+  extractPageNumber,
+  extractTimestamp,
+  isGoogleDriveUrl,
+  toDownloadUrl,
+  withPageAnchor
+} from "@/lib/utils";
 
 type SourceViewerProps = {
   workspaceId: string;
@@ -60,17 +66,19 @@ export function SourceViewer({ workspaceId, citation }: SourceViewerProps) {
   }
 
   const page = extractPageNumber(citation.ref);
-  const previewUrl =
-    previewQuery.data?.url && looksLikePdf(previewQuery.data.url)
-      ? withPageAnchor(previewQuery.data.url, page)
-      : previewQuery.data?.url;
+  const rawPreviewUrl = previewQuery.data?.url ?? citation.url;
+  const previewUrl = rawPreviewUrl && looksLikePdf(rawPreviewUrl) ? withPageAnchor(rawPreviewUrl, page) : rawPreviewUrl;
 
-  const isDriveUrl = previewUrl?.includes("drive.google.com");
+  const isDriveUrl = isGoogleDriveUrl(previewUrl);
+  const openUrl =
+    previewUrl && timestamp !== null ? `${previewUrl}${previewUrl.includes("?") ? "&" : "?"}t=${timestamp}` : previewUrl;
+  const downloadUrl = previewUrl ? toDownloadUrl(previewUrl) : undefined;
+
   let driveEmbedUrl = previewUrl;
   if (isDriveUrl && previewUrl) {
     driveEmbedUrl = previewUrl.replace("/view", "/preview");
     if (timestamp !== null) {
-      driveEmbedUrl += `?t=${timestamp}`;
+      driveEmbedUrl += `${driveEmbedUrl.includes("?") ? "&" : "?"}t=${timestamp}`;
     }
   }
 
@@ -112,7 +120,7 @@ export function SourceViewer({ workspaceId, citation }: SourceViewerProps) {
 
             {!previewQuery.isLoading && !previewQuery.isError && previewUrl && (
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="text-xs text-slate-500">
                     {isVideoSource
                       ? `タイムスタンプ: ${citation.ref}`
@@ -120,24 +128,32 @@ export function SourceViewer({ workspaceId, citation }: SourceViewerProps) {
                       ? `ページジャンプ: ${page}`
                       : "参照位置情報なし"}
                   </p>
-                  <a
-                    href={previewUrl + (timestamp !== null ? `?t=${timestamp}` : "")}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex h-9 items-center gap-1 rounded-md bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-700 shadow-sm transition-all"
-                  >
-                    <ExternalLink className="h-4 w-4" />
-                    {isDriveUrl ? "Google Drive で開く" : "大画面で開く"}
-                  </a>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <a
+                      href={openUrl || previewUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex h-9 items-center gap-1 rounded-md bg-blue-600 px-4 text-sm font-medium text-white shadow-sm transition-all hover:bg-blue-700"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                      {isVideoSource ? "動画を開く" : isDriveUrl ? "Google Drive で開く" : "大画面で開く"}
+                    </a>
+                    {downloadUrl && (
+                      <a
+                        href={downloadUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex h-9 items-center gap-1 rounded-md border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition-all hover:bg-slate-100"
+                      >
+                        <Download className="h-4 w-4" />
+                        ダウンロード
+                      </a>
+                    )}
+                  </div>
                 </div>
                 {isVideoSource && !isDriveUrl ? (
                   <div className="relative aspect-video w-full overflow-hidden rounded-md border border-slate-200 bg-black">
-                    <video
-                      ref={videoRef}
-                      src={previewUrl}
-                      controls
-                      className="h-full w-full"
-                    />
+                    <video ref={videoRef} src={previewUrl} controls className="h-full w-full" />
                   </div>
                 ) : (
                   <iframe
