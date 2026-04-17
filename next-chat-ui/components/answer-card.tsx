@@ -1,11 +1,12 @@
 "use client";
 
-import { ExternalLink } from "lucide-react";
+import { Download, ExternalLink } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { ChatResponse, Citation } from "@/lib/api/types";
+import { toDownloadUrl } from "@/lib/utils";
 
 type AnswerCardProps = {
   response: ChatResponse;
@@ -39,20 +40,47 @@ export function AnswerCard({ response, onCitationClick }: AnswerCardProps) {
         <section className="space-y-2">
           <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">根拠</h4>
           {response.citations.length > 0 ? (
-            <div className="flex flex-wrap gap-2">
+            <div className="space-y-2">
               {response.citations.map((citation, index) => (
-                <Button
+                <div
                   key={`${citation.doc_id}-${citation.ref}-${index}`}
-                  variant="outline"
-                  size="sm"
-                  onClick={() => onCitationClick(citation)}
-                  className="max-w-full gap-1 truncate"
+                  className="flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-slate-50 p-2"
                 >
-                  <span className="truncate text-xs">
-                    {citation.file_name} {citation.ref}
-                  </span>
-                  <ExternalLink className="h-3 w-3 shrink-0" />
-                </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onCitationClick(citation)}
+                    className="max-w-full gap-1 truncate"
+                  >
+                    <span className="truncate text-xs">
+                      {citation.file_name} {citation.ref}
+                    </span>
+                    <ExternalLink className="h-3 w-3 shrink-0" />
+                  </Button>
+
+                  {citation.url && (
+                    <>
+                      <a
+                        href={citation.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-white px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50"
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                        {citation.ref_type === "video" ? "動画リンク" : "原文を開く"}
+                      </a>
+                      <a
+                        href={toDownloadUrl(citation.url)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100"
+                      >
+                        <Download className="h-3 w-3" />
+                        ダウンロード
+                      </a>
+                    </>
+                  )}
+                </div>
               ))}
             </div>
           ) : (

@@ -1,45 +1,44 @@
+"use client";
+
 const CLINIC_KEY_STORAGE = "hujihana_clinic_key";
 
-export const AUTH_COOKIE_NAME = "fujihana-chat-auth";
-export const AUTH_COOKIE_VALUE = "authenticated";
+function getClinicKeyStorage(): Storage | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  return window.sessionStorage;
+}
 
-export function saveClinicKey(key: string): void {
+function clearLegacyClinicKey(): void {
   if (typeof window !== "undefined") {
-    window.localStorage.setItem(CLINIC_KEY_STORAGE, key);
+    window.localStorage.removeItem(CLINIC_KEY_STORAGE);
+  }
+}
+
+export function saveClinicKey(key: string) {
+  const storage = getClinicKeyStorage();
+  if (storage) {
+    clearLegacyClinicKey();
+    storage.setItem(CLINIC_KEY_STORAGE, key);
   }
 }
 
 export function getClinicKey(): string | null {
-  if (typeof window !== "undefined") {
-    return window.localStorage.getItem(CLINIC_KEY_STORAGE);
+  const storage = getClinicKeyStorage();
+  if (storage) {
+    clearLegacyClinicKey();
+    return storage.getItem(CLINIC_KEY_STORAGE);
   }
   return null;
 }
 
-export function clearClinicKey(): void {
+export function clearClinicKey() {
   if (typeof window !== "undefined") {
+    window.sessionStorage.removeItem(CLINIC_KEY_STORAGE);
     window.localStorage.removeItem(CLINIC_KEY_STORAGE);
   }
 }
 
 export function isAuthenticated(): boolean {
   return !!getClinicKey();
-}
-
-export function hasConfiguredLoginPassword(): boolean {
-  return typeof process.env.APP_LOGIN_PASSWORD === "string" && process.env.APP_LOGIN_PASSWORD.trim().length > 0;
-}
-
-export function verifyLoginPassword(input: string): boolean {
-  const candidate = input.trim();
-  if (!candidate) {
-    return false;
-  }
-
-  const configured = process.env.APP_LOGIN_PASSWORD?.trim();
-  if (!configured) {
-    return true;
-  }
-
-  return candidate === configured;
 }

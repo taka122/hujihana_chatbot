@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AlertCircle, ExternalLink, FileWarning, Loader2, Trash2 } from "lucide-react";
+import { AlertCircle, Download, ExternalLink, FileWarning, Loader2, Trash2 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { fetchDocPresignedUrl } from "@/lib/api/client";
 import type { Doc } from "@/lib/api/types";
 import { useDeleteDoc } from "@/lib/hooks/use-delete-doc";
-import { formatDateTime } from "@/lib/utils";
+import { formatDateTime, toDownloadUrl } from "@/lib/utils";
 
 type DocTableProps = {
   workspaceId: string;
@@ -55,6 +55,7 @@ export function DocTable({ workspaceId, docs, isLoading, isError, onOpenReport }
   const { toast } = useToast();
   const deleteDoc = useDeleteDoc(workspaceId);
   const [openingDocId, setOpeningDocId] = useState<string | null>(null);
+  const [downloadingDocId, setDownloadingDocId] = useState<string | null>(null);
   const deletingDocId = deleteDoc.isPending ? (deleteDoc.variables ?? null) : null;
 
   const handleOpenDoc = async (doc: Doc) => {
@@ -81,6 +82,33 @@ export function DocTable({ workspaceId, docs, isLoading, isError, onOpenReport }
       });
     } finally {
       setOpeningDocId((current) => (current === doc.doc_id ? null : current));
+    }
+  };
+
+  const handleDownloadDoc = async (doc: Doc) => {
+    const downloadWindow = window.open("", "_blank");
+    if (!downloadWindow) {
+      toast({
+        title: "ダウンロードを開始できませんでした",
+        description: "ブラウザのポップアップブロックを解除して再試行してください。",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setDownloadingDocId(doc.doc_id);
+    try {
+      const previewUrl = await fetchDocPresignedUrl(workspaceId, doc.doc_id);
+      downloadWindow.location.href = toDownloadUrl(previewUrl);
+    } catch (error) {
+      downloadWindow.close();
+      toast({
+        title: "ダウンロードに失敗しました",
+        description: error instanceof Error ? error.message : "不明なエラー",
+        variant: "destructive"
+      });
+    } finally {
+      setDownloadingDocId((current) => (current === doc.doc_id ? null : current));
     }
   };
 
@@ -142,80 +170,100 @@ export function DocTable({ workspaceId, docs, isLoading, isError, onOpenReport }
             </TableRow>
           </TableHeader>
           <TableBody>
-            {docs.map((doc) => (
-              <TableRow key={doc.doc_id}>
-                <TableCell className="font-medium text-slate-800">{doc.file_name}</TableCell>
-                <TableCell className="text-slate-600">{doc.mime}</TableCell>
-                <TableCell>
-                  <StatusBadge doc={doc} />
-                </TableCell>
-                <TableCell>{doc.page_count ?? "-"}</TableCell>
-                <TableCell>
-                  <div className="flex flex-wrap gap-1">
-                    {doc.tags.length === 0 ? (
-                      <span className="text-xs text-slate-400">-</span>
-                    ) : (
-                      doc.tags.map((tag) => (
-                        <Badge key={tag} variant="secondary" className="text-[10px]">
-                          {tag}
-                        </Badge>
-                      ))
-                    )}
-                  </div>
-                </TableCell>
-                <TableCell className="whitespace-nowrap text-xs text-slate-500">
-                  {formatDateTime(doc.updated_at)}
-                </TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => void handleOpenDoc(doc)}
-                      disabled={openingDocId === doc.doc_id || deletingDocId === doc.doc_id}
-                    >
-                      {openingDocId === doc.doc_id ? (
-                        <>
-                          <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                          開く...
-                        </>
+            {docs.map((doc) => {
+              const isBusy =
+                openingDocId === doc.doc_id ||
+                downloadingDocId === doc.doc_id ||
+                deletingDocId === doc.doc_id;
+
+              return (
+                <TableRow key={doc.doc_id}>
+                  <TableCell className="font-medium text-slate-800">{doc.file_name}</TableCell>
+                  <TableCell className="text-slate-600">{doc.mime}</TableCell>
+                  <TableCell>
+                    <StatusBadge doc={doc} />
+                  </TableCell>
+                  <TableCell>{doc.page_count ?? "-"}</TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-1">
+                      {doc.tags.length === 0 ? (
+                        <span className="text-xs text-slate-400">-</span>
                       ) : (
-                        <>
-                          <ExternalLink className="mr-1 h-3 w-3" />
-                          内容を開く
-                        </>
+                        doc.tags.map((tag) => (
+                          <Badge key={tag} variant="secondary" className="text-[10px]">
+                            {tag}
+                          </Badge>
+                        ))
                       )}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => onOpenReport(doc.doc_id)}
-                      disabled={deletingDocId === doc.doc_id}
-                    >
-                      Ingestion Report
-                    </Button>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => void handleDeleteDoc(doc)}
-                      disabled={deletingDocId === doc.doc_id}
-                    >
-                      {deletingDocId === doc.doc_id ? (
-                        <>
-                          <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                          削除中...
-                        </>
-                      ) : (
-                        <>
-                          <Trash2 className="mr-1 h-3 w-3" />
-                          削除
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
+                    </div>
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap text-xs text-slate-500">
+                    {formatDateTime(doc.updated_at)}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => void handleOpenDoc(doc)}
+                        disabled={isBusy}
+                      >
+                        {openingDocId === doc.doc_id ? (
+                          <>
+                            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                            開く...
+                          </>
+                        ) : (
+                          <>
+                            <ExternalLink className="mr-1 h-3 w-3" />
+                            内容を開く
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => void handleDownloadDoc(doc)}
+                        disabled={isBusy}
+                      >
+                        {downloadingDocId === doc.doc_id ? (
+                          <>
+                            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                            DL中...
+                          </>
+                        ) : (
+                          <>
+                            <Download className="mr-1 h-3 w-3" />
+                            ダウンロード
+                          </>
+                        )}
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => onOpenReport(doc.doc_id)} disabled={isBusy}>
+                        Ingestion Report
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => void handleDeleteDoc(doc)}
+                        disabled={isBusy}
+                      >
+                        {deletingDocId === doc.doc_id ? (
+                          <>
+                            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                            削除中...
+                          </>
+                        ) : (
+                          <>
+                            <Trash2 className="mr-1 h-3 w-3" />
+                            削除
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </div>

@@ -23,10 +23,11 @@ const ACCEPTED_FILES = {
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"],
   "image/png": [".png"],
   "image/jpeg": [".jpg", ".jpeg"],
-  "video/mp4": [".mp4"],
+  "video/mp4": [".mp4", ".m4v"],
   "video/quicktime": [".mov"],
   "video/x-msvideo": [".avi"],
-  "video/x-matroska": [".mkv"]
+  "video/x-matroska": [".mkv"],
+  "video/webm": [".webm"]
 };
 
 export function DocUploader({ workspaceId }: DocUploaderProps) {
@@ -80,12 +81,12 @@ export function DocUploader({ workspaceId }: DocUploaderProps) {
     [toast, uploadDoc]
   );
 
-  const handleDriveImport = useCallback(async () => {
+  const handleDriveImport = async () => {
     const trimmed = driveFolderUrl.trim();
     if (!trimmed) {
       toast({
-        title: "DriveフォルダURLが未入力です",
-        description: "Google DriveフォルダのURLまたはフォルダIDを入力してください。",
+        title: "Google DriveフォルダURLを入力してください",
+        description: "https://drive.google.com/drive/folders/... の形式で入力してください。",
         variant: "destructive"
       });
       return;
@@ -93,19 +94,19 @@ export function DocUploader({ workspaceId }: DocUploaderProps) {
 
     try {
       const result = await importDriveFolder.mutateAsync({ folderUrl: trimmed });
-      setDriveFolderUrl("");
       toast({
-        title: "Driveフォルダ取込を開始しました",
-        description: `${result.queued_count}件を受付、${result.skipped_count}件をスキップしました。`
+        title: "Google Drive取込を開始しました",
+        description: `追加: ${result.queued_count}件 / スキップ: ${result.skipped_count}件`
       });
+      setDriveFolderUrl("");
     } catch (error) {
       toast({
-        title: "Drive取込失敗",
-        description: error instanceof Error ? error.message : "Google Driveフォルダを確認できませんでした。",
+        title: "Google Drive取込に失敗しました",
+        description: error instanceof Error ? error.message : "不明なエラーです。",
         variant: "destructive"
       });
     }
-  }, [driveFolderUrl, importDriveFolder, toast]);
+  };
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -115,10 +116,10 @@ export function DocUploader({ workspaceId }: DocUploaderProps) {
   });
 
   return (
-    <Card className="border-slate-300 bg-slate-50/80 p-4">
-      <div
+    <div className="space-y-3">
+      <Card
         {...getRootProps()}
-        className="cursor-pointer rounded-lg border border-dashed border-slate-300 p-4 transition hover:border-blue-400 hover:bg-blue-50"
+        className="cursor-pointer border-dashed border-slate-300 bg-slate-50/80 p-4 transition hover:border-blue-400 hover:bg-blue-50"
       >
         <input {...getInputProps()} />
         <div className="flex items-center gap-3">
@@ -131,7 +132,7 @@ export function DocUploader({ workspaceId }: DocUploaderProps) {
             <p className="text-sm font-semibold text-slate-900">
               {isDragActive ? "ここにドロップ" : "ファイルをドラッグ&ドロップ / クリックで選択"}
             </p>
-            <p className="text-xs text-slate-500">pdf, docx, txt, md, pptx, xlsx, png, jpg, mp4, mov, avi, mkv</p>
+            <p className="text-xs text-slate-500">pdf, docx, txt, md, pptx, xlsx, png, jpg, mp4, mov, avi, mkv, webm</p>
           </div>
         </div>
 
@@ -149,41 +150,43 @@ export function DocUploader({ workspaceId }: DocUploaderProps) {
             </div>
           </div>
         )}
-      </div>
+      </Card>
 
-      <div className="mt-4 space-y-2 border-t border-slate-200 pt-4">
-        <p className="text-sm font-semibold text-slate-900">Google Driveフォルダから動画を取り込む</p>
-        <p className="text-xs text-slate-500">
-          フォルダURLまたはフォルダIDを貼り付けると、フォルダ内の動画ファイルをまとめて登録します。
-        </p>
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <Input
-            value={driveFolderUrl}
-            onChange={(event) => setDriveFolderUrl(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                void handleDriveImport();
-              }
-            }}
-            placeholder="https://drive.google.com/drive/folders/..."
-            disabled={importDriveFolder.isPending}
-          />
-          <Button
-            type="button"
-            className="gap-2"
-            onClick={() => void handleDriveImport()}
-            disabled={importDriveFolder.isPending}
-          >
-            {importDriveFolder.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <FolderUp className="h-4 w-4" />
-            )}
-            取込開始
-          </Button>
+      <Card className="border-slate-200 bg-white p-4">
+        <div className="space-y-2">
+          <p className="text-sm font-semibold text-slate-900">Google DriveフォルダURLから動画を取り込む</p>
+          <p className="text-xs text-slate-500">
+            `https://drive.google.com/drive/folders/...` を貼り付けると、動画を取込対象に追加できます。
+          </p>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Input
+              value={driveFolderUrl}
+              onChange={(event) => setDriveFolderUrl(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  void handleDriveImport();
+                }
+              }}
+              placeholder="https://drive.google.com/drive/folders/..."
+              disabled={importDriveFolder.isPending}
+            />
+            <Button
+              type="button"
+              className="gap-2"
+              onClick={() => void handleDriveImport()}
+              disabled={importDriveFolder.isPending || driveFolderUrl.trim().length === 0}
+            >
+              {importDriveFolder.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <FolderUp className="h-4 w-4" />
+              )}
+              {importDriveFolder.isPending ? "取込中..." : "取込開始"}
+            </Button>
+          </div>
         </div>
-      </div>
-    </Card>
+      </Card>
+    </div>
   );
 }

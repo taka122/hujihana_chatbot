@@ -153,6 +153,16 @@ function normalizeIngestionReport(raw: unknown): IngestionReport {
   };
 }
 
+function normalizeDriveImportResponse(raw: unknown): DriveImportResponse {
+  const item = asRecord(raw);
+  return {
+    folder_id: String(item?.folder_id ?? ""),
+    queued_count: typeof item?.queued_count === "number" ? item.queued_count : 0,
+    skipped_count: typeof item?.skipped_count === "number" ? item.skipped_count : 0,
+    doc_ids: Array.isArray(item?.doc_ids) ? item.doc_ids.map((value) => String(value)) : []
+  };
+}
+
 function normalizeChatResponse(raw: unknown): ChatResponse {
   const payload = asRecord(raw);
   const answer = asRecord(payload?.answer);
@@ -165,19 +175,21 @@ function normalizeChatResponse(raw: unknown): ChatResponse {
       const refType = citation?.ref_type;
       const ref = citation?.ref;
       const snippet = citation?.snippet;
-      const chunkId = citation?.chunk_id;
-      const normalizedRefType: "page" | "slide" | "sheet" | null =
-        refType === "page" || refType === "slide" || refType === "sheet" ? refType : null;
+      const normalizedRefType: "page" | "slide" | "sheet" | "video" | null =
+        refType === "page" || refType === "slide" || refType === "sheet" || refType === "video"
+          ? refType
+          : null;
+
       if (
         (typeof docId !== "string" && typeof docId !== "number") ||
         (typeof fileName !== "string" && typeof fileName !== "number") ||
         !normalizedRefType ||
         (typeof ref !== "string" && typeof ref !== "number") ||
-        (typeof snippet !== "string" && typeof snippet !== "number") ||
-        (typeof chunkId !== "string" && typeof chunkId !== "number")
+        (typeof snippet !== "string" && typeof snippet !== "number")
       ) {
         return null;
       }
+
       return {
         doc_id: String(docId),
         file_name: String(fileName),
@@ -185,7 +197,9 @@ function normalizeChatResponse(raw: unknown): ChatResponse {
         ref: String(ref),
         snippet: String(snippet),
         score: typeof citation?.score === "number" ? citation.score : null,
-        chunk_id: String(chunkId)
+        chunk_id: citation?.chunk_id == null ? undefined : String(citation.chunk_id),
+        mime_type: citation?.mime_type == null ? undefined : String(citation.mime_type),
+        url: typeof citation?.url === "string" && citation.url.length > 0 ? citation.url : undefined
       };
     })
     .filter((value): value is NonNullable<typeof value> => value !== null);
@@ -294,13 +308,7 @@ export async function importDriveFolder(
     method: "POST",
     body: JSON.stringify({ folder_url: folderUrl })
   });
-  const item = asRecord(payload);
-  return {
-    folder_id: String(item?.folder_id ?? ""),
-    queued_count: typeof item?.queued_count === "number" ? item.queued_count : 0,
-    skipped_count: typeof item?.skipped_count === "number" ? item.skipped_count : 0,
-    doc_ids: Array.isArray(item?.doc_ids) ? item.doc_ids.map((value) => String(value)) : []
-  };
+  return normalizeDriveImportResponse(payload);
 }
 
 export async function fetchIngestionReport(
