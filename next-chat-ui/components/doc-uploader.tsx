@@ -119,20 +119,22 @@ export function DocUploader({ workspaceId }: DocUploaderProps) {
     <div className="space-y-3">
       <Card
         {...getRootProps()}
-        className="cursor-pointer border-dashed border-slate-300 bg-slate-50/80 p-4 transition hover:border-blue-400 hover:bg-blue-50"
+        className="cursor-pointer border-dashed border-slate-300 bg-slate-50/80 p-3 transition hover:border-blue-400 hover:bg-blue-50 sm:p-4"
       >
         <input {...getInputProps()} />
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center">
           {uploadDoc.isPending ? (
             <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
           ) : (
             <FileUp className="h-5 w-5 text-blue-600" />
           )}
-          <div>
+          <div className="min-w-0">
             <p className="text-sm font-semibold text-slate-900">
               {isDragActive ? "ここにドロップ" : "ファイルをドラッグ&ドロップ / クリックで選択"}
             </p>
-            <p className="text-xs text-slate-500">pdf, docx, txt, md, pptx, xlsx, png, jpg, mp4, mov, avi, mkv, webm</p>
+            <p className="break-words text-xs text-slate-500">
+              pdf, docx, txt, md, pptx, xlsx, png, jpg, mp4, mov, avi, mkv, webm
+            </p>
           </div>
         </div>
 

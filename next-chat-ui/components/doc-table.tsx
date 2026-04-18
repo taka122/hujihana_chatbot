@@ -21,6 +21,19 @@ type DocTableProps = {
   onOpenReport: (docId: string) => void;
 };
 
+type DocActionButtonsProps = {
+  doc: Doc;
+  isBusy: boolean;
+  openingDocId: string | null;
+  downloadingDocId: string | null;
+  deletingDocId: string | null;
+  onOpenDoc: (doc: Doc) => Promise<void>;
+  onDownloadDoc: (doc: Doc) => Promise<void>;
+  onOpenReport: (docId: string) => void;
+  onDeleteDoc: (doc: Doc) => Promise<void>;
+  layout?: "grid" | "flex";
+};
+
 function StatusBadge({ doc }: { doc: Doc }) {
   if (doc.status === "ready") {
     return <Badge variant="success">Ready</Badge>;
@@ -44,9 +57,98 @@ function StatusBadge({ doc }: { doc: Doc }) {
               <AlertCircle className="h-4 w-4" />
             </button>
           </TooltipTrigger>
-          <TooltipContent side="top">{doc.fail_reason}</TooltipContent>
+          <TooltipContent side="top" className="max-w-xs break-words">
+            {doc.fail_reason}
+          </TooltipContent>
         </Tooltip>
       )}
+    </div>
+  );
+}
+
+function DocActionButtons({
+  doc,
+  isBusy,
+  openingDocId,
+  downloadingDocId,
+  deletingDocId,
+  onOpenDoc,
+  onDownloadDoc,
+  onOpenReport,
+  onDeleteDoc,
+  layout = "flex"
+}: DocActionButtonsProps) {
+  const isGrid = layout === "grid";
+  const buttonClassName = isGrid ? "h-auto min-h-9 w-full justify-center px-2 py-2 text-xs leading-tight" : undefined;
+
+  return (
+    <div className={isGrid ? "grid grid-cols-2 gap-2" : "flex flex-wrap items-center gap-2"}>
+      <Button
+        variant="outline"
+        size="sm"
+        className={buttonClassName}
+        onClick={() => void onOpenDoc(doc)}
+        disabled={isBusy}
+      >
+        {openingDocId === doc.doc_id ? (
+          <>
+            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+            開く...
+          </>
+        ) : (
+          <>
+            <ExternalLink className="mr-1 h-3 w-3" />
+            内容を開く
+          </>
+        )}
+      </Button>
+      <Button
+        variant="outline"
+        size="sm"
+        className={buttonClassName}
+        onClick={() => void onDownloadDoc(doc)}
+        disabled={isBusy}
+      >
+        {downloadingDocId === doc.doc_id ? (
+          <>
+            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+            DL中...
+          </>
+        ) : (
+          <>
+            <Download className="mr-1 h-3 w-3" />
+            ダウンロード
+          </>
+        )}
+      </Button>
+      <Button
+        variant="outline"
+        size="sm"
+        className={buttonClassName}
+        onClick={() => onOpenReport(doc.doc_id)}
+        disabled={isBusy}
+      >
+        Ingestion Report
+      </Button>
+      <Button
+        variant="destructive"
+        size="sm"
+        className={buttonClassName}
+        onClick={() => void onDeleteDoc(doc)}
+        disabled={isBusy}
+      >
+        {deletingDocId === doc.doc_id ? (
+          <>
+            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+            削除中...
+          </>
+        ) : (
+          <>
+            <Trash2 className="mr-1 h-3 w-3" />
+            削除
+          </>
+        )}
+      </Button>
     </div>
   );
 }
@@ -156,116 +258,138 @@ export function DocTable({ workspaceId, docs, isLoading, isError, onOpenReport }
 
   return (
     <TooltipProvider>
-      <div className="max-h-[56vh] overflow-auto rounded-lg border border-slate-200 bg-white">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="min-w-[220px]">ファイル名</TableHead>
-              <TableHead>種別</TableHead>
-              <TableHead>ステータス</TableHead>
-              <TableHead>ページ数</TableHead>
-              <TableHead className="min-w-[140px]">タグ</TableHead>
-              <TableHead>更新日時</TableHead>
-              <TableHead>アクション</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {docs.map((doc) => {
-              const isBusy =
-                openingDocId === doc.doc_id ||
-                downloadingDocId === doc.doc_id ||
-                deletingDocId === doc.doc_id;
+      <div className="space-y-3 md:hidden">
+        {docs.map((doc) => {
+          const isBusy =
+            openingDocId === doc.doc_id ||
+            downloadingDocId === doc.doc_id ||
+            deletingDocId === doc.doc_id;
 
-              return (
-                <TableRow key={doc.doc_id}>
-                  <TableCell className="font-medium text-slate-800">{doc.file_name}</TableCell>
-                  <TableCell className="text-slate-600">{doc.mime}</TableCell>
-                  <TableCell>
-                    <StatusBadge doc={doc} />
-                  </TableCell>
-                  <TableCell>{doc.page_count ?? "-"}</TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1">
-                      {doc.tags.length === 0 ? (
-                        <span className="text-xs text-slate-400">-</span>
-                      ) : (
-                        doc.tags.map((tag) => (
-                          <Badge key={tag} variant="secondary" className="text-[10px]">
-                            {tag}
-                          </Badge>
-                        ))
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap text-xs text-slate-500">
-                    {formatDateTime(doc.updated_at)}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => void handleOpenDoc(doc)}
-                        disabled={isBusy}
-                      >
-                        {openingDocId === doc.doc_id ? (
-                          <>
-                            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                            開く...
-                          </>
+          return (
+            <article key={doc.doc_id} className="space-y-3 rounded-lg border border-slate-200 bg-white p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 space-y-1">
+                  <p className="break-words text-sm font-semibold text-slate-900">{doc.file_name}</p>
+                  <p className="break-all text-xs text-slate-500">{doc.mime}</p>
+                </div>
+                <StatusBadge doc={doc} />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-md bg-slate-50 p-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">ページ数</p>
+                  <p className="mt-1 text-sm font-medium text-slate-900">{doc.page_count ?? "-"}</p>
+                </div>
+                <div className="rounded-md bg-slate-50 p-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">更新日時</p>
+                  <p className="mt-1 text-xs leading-relaxed text-slate-700">{formatDateTime(doc.updated_at)}</p>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">タグ</p>
+                <div className="flex flex-wrap gap-1">
+                  {doc.tags.length === 0 ? (
+                    <span className="text-xs text-slate-400">-</span>
+                  ) : (
+                    doc.tags.map((tag) => (
+                      <Badge key={tag} variant="secondary" className="text-[10px]">
+                        {tag}
+                      </Badge>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {doc.status === "failed" && doc.fail_reason && (
+                <div className="rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-700">
+                  {doc.fail_reason}
+                </div>
+              )}
+
+              <DocActionButtons
+                doc={doc}
+                isBusy={isBusy}
+                openingDocId={openingDocId}
+                downloadingDocId={downloadingDocId}
+                deletingDocId={deletingDocId}
+                onOpenDoc={handleOpenDoc}
+                onDownloadDoc={handleDownloadDoc}
+                onOpenReport={onOpenReport}
+                onDeleteDoc={handleDeleteDoc}
+                layout="grid"
+              />
+            </article>
+          );
+        })}
+      </div>
+
+      <div className="hidden rounded-lg border border-slate-200 bg-white md:block">
+        <div className="max-h-[56vh] overflow-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="min-w-[220px]">ファイル名</TableHead>
+                <TableHead>種別</TableHead>
+                <TableHead>ステータス</TableHead>
+                <TableHead>ページ数</TableHead>
+                <TableHead className="min-w-[140px]">タグ</TableHead>
+                <TableHead>更新日時</TableHead>
+                <TableHead>アクション</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {docs.map((doc) => {
+                const isBusy =
+                  openingDocId === doc.doc_id ||
+                  downloadingDocId === doc.doc_id ||
+                  deletingDocId === doc.doc_id;
+
+                return (
+                  <TableRow key={doc.doc_id}>
+                    <TableCell className="max-w-[280px] break-words font-medium text-slate-800">
+                      {doc.file_name}
+                    </TableCell>
+                    <TableCell className="max-w-[220px] break-words text-slate-600">{doc.mime}</TableCell>
+                    <TableCell>
+                      <StatusBadge doc={doc} />
+                    </TableCell>
+                    <TableCell>{doc.page_count ?? "-"}</TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1">
+                        {doc.tags.length === 0 ? (
+                          <span className="text-xs text-slate-400">-</span>
                         ) : (
-                          <>
-                            <ExternalLink className="mr-1 h-3 w-3" />
-                            内容を開く
-                          </>
+                          doc.tags.map((tag) => (
+                            <Badge key={tag} variant="secondary" className="text-[10px]">
+                              {tag}
+                            </Badge>
+                          ))
                         )}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => void handleDownloadDoc(doc)}
-                        disabled={isBusy}
-                      >
-                        {downloadingDocId === doc.doc_id ? (
-                          <>
-                            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                            DL中...
-                          </>
-                        ) : (
-                          <>
-                            <Download className="mr-1 h-3 w-3" />
-                            ダウンロード
-                          </>
-                        )}
-                      </Button>
-                      <Button variant="outline" size="sm" onClick={() => onOpenReport(doc.doc_id)} disabled={isBusy}>
-                        Ingestion Report
-                      </Button>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => void handleDeleteDoc(doc)}
-                        disabled={isBusy}
-                      >
-                        {deletingDocId === doc.doc_id ? (
-                          <>
-                            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                            削除中...
-                          </>
-                        ) : (
-                          <>
-                            <Trash2 className="mr-1 h-3 w-3" />
-                            削除
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
+                      </div>
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-xs text-slate-500">
+                      {formatDateTime(doc.updated_at)}
+                    </TableCell>
+                    <TableCell>
+                      <DocActionButtons
+                        doc={doc}
+                        isBusy={isBusy}
+                        openingDocId={openingDocId}
+                        downloadingDocId={downloadingDocId}
+                        deletingDocId={deletingDocId}
+                        onOpenDoc={handleOpenDoc}
+                        onDownloadDoc={handleDownloadDoc}
+                        onOpenReport={onOpenReport}
+                        onDeleteDoc={handleDeleteDoc}
+                      />
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </div>
       </div>
       {docs.some((doc) => doc.status === "failed") && (
         <div className="mt-2 flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">

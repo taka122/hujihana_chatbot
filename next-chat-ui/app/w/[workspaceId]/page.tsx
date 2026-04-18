@@ -1,7 +1,7 @@
 "use client";
 
 import { MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from "react";
-import { PanelRightOpen } from "lucide-react";
+import { PanelLeftOpen, PanelRightOpen } from "lucide-react";
 
 import { ChatPanel } from "@/components/chat-panel";
 import { DocTable } from "@/components/doc-table";
@@ -38,6 +38,7 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
   const workspaceId = params.workspaceId;
   const docsQuery = useDocs(workspaceId, true);
 
+  const [docsSheetOpen, setDocsSheetOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [reportDocId, setReportDocId] = useState<string | null>(null);
   const [selectedCitation, setSelectedCitation] = useState<Citation | null>(null);
@@ -64,7 +65,9 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
 
   const handleCitationClick = (citation: Citation) => {
     setSelectedCitation(citation);
-    setSourceSheetOpen(true);
+    if (window.matchMedia("(max-width: 1023px)").matches) {
+      setSourceSheetOpen(true);
+    }
   };
 
   useEffect(() => {
@@ -153,36 +156,66 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
   };
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-[1800px] flex-col gap-4 p-4 lg:p-6">
-      <header className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white/90 p-3 shadow-sm backdrop-blur">
+    <main className="mx-auto flex min-h-dvh w-full max-w-[1800px] flex-col gap-4 p-3 sm:p-4 lg:p-6">
+      <header className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-slate-200 bg-white/90 p-3 shadow-sm backdrop-blur sm:items-center">
         <div>
           <p className="text-xs font-semibold tracking-[0.08em] text-slate-500">藤花歯科クリニック専用Chatbot</p>
           <h1 className="text-lg font-semibold text-slate-900">受付マニュアル</h1>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
           <WorkspaceSelector currentWorkspaceId={workspaceId} />
-          <LogoutButton className="gap-2" />
-          <Sheet open={sourceSheetOpen} onOpenChange={setSourceSheetOpen}>
-            <SheetTrigger asChild>
-              <Button variant="outline" className="gap-2 lg:hidden">
-                <PanelRightOpen className="h-4 w-4" />
-                Source
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="right" className="p-0 sm:max-w-2xl">
-              <SheetHeader className="border-b border-slate-200 p-4">
-                <SheetTitle>Source Viewer</SheetTitle>
-                <SheetDescription>引用を開いて原文を確認します。</SheetDescription>
-              </SheetHeader>
-              <div className="p-4">
-                <SourceViewer workspaceId={workspaceId} citation={selectedCitation} />
-              </div>
-            </SheetContent>
-          </Sheet>
+          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+            <Sheet open={docsSheetOpen} onOpenChange={setDocsSheetOpen}>
+              <SheetTrigger asChild>
+                <Button variant="outline" className="gap-2 lg:hidden">
+                  <PanelLeftOpen className="h-4 w-4" />
+                  Docs
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="right" className="flex w-full flex-col p-0 sm:max-w-2xl">
+                <SheetHeader className="border-b border-slate-200 p-4">
+                  <SheetTitle>Docs</SheetTitle>
+                  <SheetDescription>資料のアップロード、確認、削除を行います。</SheetDescription>
+                </SheetHeader>
+                <div className="min-h-0 flex-1 overflow-y-auto p-4">
+                  <div className="space-y-4">
+                    <DocUploader workspaceId={workspaceId} />
+                    <DocTable
+                      workspaceId={workspaceId}
+                      docs={sortedDocs}
+                      isLoading={docsQuery.isLoading}
+                      isError={docsQuery.isError}
+                      onOpenReport={openReport}
+                    />
+                  </div>
+                </div>
+              </SheetContent>
+            </Sheet>
+
+            <Sheet open={sourceSheetOpen} onOpenChange={setSourceSheetOpen}>
+              <SheetTrigger asChild>
+                <Button variant="outline" className="gap-2 lg:hidden">
+                  <PanelRightOpen className="h-4 w-4" />
+                  Source
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="right" className="flex w-full flex-col p-0 sm:max-w-2xl">
+                <SheetHeader className="border-b border-slate-200 p-4">
+                  <SheetTitle>Source Viewer</SheetTitle>
+                  <SheetDescription>引用を開いて原文を確認します。</SheetDescription>
+                </SheetHeader>
+                <div className="min-h-0 flex-1 overflow-y-auto p-4">
+                  <SourceViewer workspaceId={workspaceId} citation={selectedCitation} />
+                </div>
+              </SheetContent>
+            </Sheet>
+
+            <LogoutButton className="gap-2" />
+          </div>
         </div>
       </header>
 
-      <section className="flex-1">
+      <section className="min-h-0 flex-1">
         <div
           ref={layoutRef}
           className="hidden h-full min-h-0 lg:grid"
@@ -235,23 +268,7 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
           </div>
         </div>
 
-        <div className="grid gap-4 lg:hidden">
-          <Card className="border-slate-200">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Docs</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 pt-0">
-              <DocUploader workspaceId={workspaceId} />
-              <DocTable
-                workspaceId={workspaceId}
-                docs={sortedDocs}
-                isLoading={docsQuery.isLoading}
-                isError={docsQuery.isError}
-                onOpenReport={openReport}
-              />
-            </CardContent>
-          </Card>
-
+        <div className="lg:hidden">
           <ChatPanel workspaceId={workspaceId} onCitationClick={handleCitationClick} />
         </div>
       </section>

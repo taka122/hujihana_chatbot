@@ -107,16 +107,16 @@ export function WorkspaceSelector({ currentWorkspaceId }: WorkspaceSelectorProps
   };
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap">
       <Select
-        value={currentValue}
+        value={currentValue ?? ""}
         onValueChange={(workspaceId) => {
-          if (workspaceId !== currentWorkspaceId) {
+          if (workspaceId && workspaceId !== currentWorkspaceId) {
             router.push(`/w/${workspaceId}`);
           }
         }}
       >
-        <SelectTrigger className="w-[220px] bg-white">
+        <SelectTrigger className="w-full min-w-0 flex-1 bg-white sm:w-[220px] sm:flex-none">
           <SelectValue placeholder={isLoading ? "読み込み中..." : "Workspaceを選択"} />
         </SelectTrigger>
         <SelectContent>
@@ -130,11 +130,11 @@ export function WorkspaceSelector({ currentWorkspaceId }: WorkspaceSelectorProps
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogTrigger asChild>
-          <Button variant="outline" size="icon" aria-label="workspace create">
+          <Button variant="outline" size="icon" aria-label="workspace create" className="shrink-0">
             <Plus className="h-4 w-4" />
           </Button>
         </DialogTrigger>
-        <DialogContent>
+        <DialogContent className="sm:max-w-md">
           <form onSubmit={handleCreate}>
             <DialogHeader>
               <DialogTitle>新規Workspace作成</DialogTitle>
@@ -159,6 +159,7 @@ export function WorkspaceSelector({ currentWorkspaceId }: WorkspaceSelectorProps
         variant="destructive"
         size="icon"
         aria-label="workspace delete"
+        className="shrink-0"
         disabled={!currentWorkspace || deleteWorkspace.isPending || createWorkspace.isPending}
         onClick={() => void handleDeleteCurrentWorkspace()}
       >

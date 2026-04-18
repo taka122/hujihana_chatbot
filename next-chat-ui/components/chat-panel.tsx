@@ -127,8 +127,11 @@ export function ChatPanel({ workspaceId, onCitationClick }: ChatPanelProps) {
       <CardHeader className="pb-3">
         <CardTitle className="text-base">Chat</CardTitle>
       </CardHeader>
-      <CardContent className="flex h-[76vh] flex-col gap-3 pt-0">
-        <div ref={logRef} className="flex-1 space-y-3 overflow-y-auto rounded-md border border-slate-200 bg-slate-50 p-3">
+      <CardContent className="flex min-h-[60dvh] flex-col gap-3 pt-0 sm:min-h-[34rem] lg:h-[76vh] lg:min-h-0">
+        <div
+          ref={logRef}
+          className="flex-1 space-y-3 overflow-y-auto rounded-md border border-slate-200 bg-slate-50 p-3 sm:p-4"
+        >
           {turns.length === 0 && (
             <p className="text-sm text-slate-500">
               質問を入力すると回答と引用が表示されます。例: 「契約解除の条件を教えて」
@@ -171,9 +174,13 @@ export function ChatPanel({ workspaceId, onCitationClick }: ChatPanelProps) {
             rows={2}
             className="min-h-[64px] bg-white"
           />
-          <div className="flex items-center justify-between text-xs text-slate-500">
+          <div className="flex flex-col gap-2 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
             <span>{pendingCount > 0 ? `送信中: ${pendingCount}` : "準備完了"}</span>
-            <Button type="submit" disabled={chat.isPending || input.trim().length === 0} className="gap-2">
+            <Button
+              type="submit"
+              disabled={chat.isPending || input.trim().length === 0}
+              className="w-full gap-2 sm:w-auto"
+            >
               {chat.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <SendHorizontal className="h-4 w-4" />}
               送信
             </Button>

@@ -57,7 +57,7 @@ export function SourceViewer({ workspaceId, citation }: SourceViewerProps) {
           <CardTitle className="text-base">Source Viewer</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex h-[65vh] items-center justify-center rounded-md border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-500">
+          <div className="flex h-[48vh] items-center justify-center rounded-md border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-500 sm:h-[65vh]">
             引用をクリックするとここに原文を表示します。
           </div>
         </CardContent>
@@ -92,7 +92,7 @@ export function SourceViewer({ workspaceId, citation }: SourceViewerProps) {
           <p className="font-medium text-slate-900">{citation.file_name}</p>
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="secondary">{citation.ref_type}</Badge>
-            <span>{citation.ref}</span>
+            <span className="break-all">{citation.ref}</span>
             {citation.score != null && <span>score: {citation.score.toFixed(3)}</span>}
           </div>
         </div>
@@ -106,7 +106,7 @@ export function SourceViewer({ workspaceId, citation }: SourceViewerProps) {
 
           <TabsContent value="preview" className="space-y-3">
             {previewQuery.isLoading && (
-              <div className="flex h-[56vh] items-center justify-center gap-2 rounded-md border border-slate-200 bg-slate-50 text-sm text-slate-600">
+              <div className="flex h-[48vh] items-center justify-center gap-2 rounded-md border border-slate-200 bg-slate-50 text-sm text-slate-600 sm:h-[56vh]">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 ソースを読み込み中...
               </div>
@@ -120,7 +120,7 @@ export function SourceViewer({ workspaceId, citation }: SourceViewerProps) {
 
             {!previewQuery.isLoading && !previewQuery.isError && previewUrl && (
               <div className="space-y-2">
-                <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
                   <p className="text-xs text-slate-500">
                     {isVideoSource
                       ? `タイムスタンプ: ${citation.ref}`
@@ -128,12 +128,12 @@ export function SourceViewer({ workspaceId, citation }: SourceViewerProps) {
                       ? `ページジャンプ: ${page}`
                       : "参照位置情報なし"}
                   </p>
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                     <a
                       href={openUrl || previewUrl}
                       target="_blank"
                       rel="noreferrer"
-                      className="inline-flex h-9 items-center gap-1 rounded-md bg-blue-600 px-4 text-sm font-medium text-white shadow-sm transition-all hover:bg-blue-700"
+                      className="inline-flex h-10 w-full items-center justify-center gap-1 rounded-md bg-blue-600 px-4 text-sm font-medium text-white shadow-sm transition-all hover:bg-blue-700 sm:h-9 sm:w-auto"
                     >
                       <ExternalLink className="h-4 w-4" />
                       {isVideoSource ? "動画を開く" : isDriveUrl ? "Google Drive で開く" : "大画面で開く"}
@@ -143,7 +143,7 @@ export function SourceViewer({ workspaceId, citation }: SourceViewerProps) {
                         href={downloadUrl}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex h-9 items-center gap-1 rounded-md border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition-all hover:bg-slate-100"
+                        className="inline-flex h-10 w-full items-center justify-center gap-1 rounded-md border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition-all hover:bg-slate-100 sm:h-9 sm:w-auto"
                       >
                         <Download className="h-4 w-4" />
                         ダウンロード
@@ -159,7 +159,7 @@ export function SourceViewer({ workspaceId, citation }: SourceViewerProps) {
                   <iframe
                     src={driveEmbedUrl || ""}
                     title="source-preview"
-                    className="h-[56vh] w-full rounded-md border border-slate-200 bg-white"
+                    className="h-[48vh] w-full rounded-md border border-slate-200 bg-white sm:h-[56vh]"
                     allow="autoplay"
                   />
                 )}
@@ -167,7 +167,7 @@ export function SourceViewer({ workspaceId, citation }: SourceViewerProps) {
             )}
 
             {!previewQuery.isLoading && !previewUrl && (
-              <div className="flex h-[56vh] flex-col items-center justify-center gap-2 rounded-md border border-dashed border-slate-300 bg-slate-50 text-sm text-slate-600">
+              <div className="flex h-[48vh] flex-col items-center justify-center gap-2 rounded-md border border-dashed border-slate-300 bg-slate-50 text-sm text-slate-600 sm:h-[56vh]">
                 {isVideoSource ? <Video className="h-5 w-5" /> : <FileText className="h-5 w-5" />}
                 プレビューURLがないためスニペット表示のみ利用できます。
               </div>
@@ -175,7 +175,7 @@ export function SourceViewer({ workspaceId, citation }: SourceViewerProps) {
           </TabsContent>
 
           <TabsContent value="snippet">
-            <div className="max-h-[56vh] space-y-2 overflow-y-auto rounded-md border border-slate-200 bg-slate-50 p-3">
+            <div className="max-h-[48vh] space-y-2 overflow-y-auto rounded-md border border-slate-200 bg-slate-50 p-3 sm:max-h-[56vh]">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">引用テキスト</p>
               {previewSnippet ? (
                 <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-800">

@@ -9,6 +9,10 @@
     --ring: 212 74% 48%;
   }
 
+  html {
+    min-height: 100%;
+  }
+
   * {
     @apply border-slate-200;
   }
@@ -19,6 +23,6 @@
     background-image:
       radial-gradient(circle at 8% 0%, rgba(59, 130, 246, 0.12) 0%, transparent 42%),
       radial-gradient(circle at 92% 100%, rgba(16, 185, 129, 0.1) 0%, transparent 34%);
-    min-height: 100vh;
+    min-height: 100dvh;
   }
 }

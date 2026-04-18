@@ -44,15 +44,15 @@ export function AnswerCard({ response, onCitationClick }: AnswerCardProps) {
               {response.citations.map((citation, index) => (
                 <div
                   key={`${citation.doc_id}-${citation.ref}-${index}`}
-                  className="flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-slate-50 p-2"
+                  className="flex flex-col items-stretch gap-2 rounded-md border border-slate-200 bg-slate-50 p-2 sm:flex-row sm:flex-wrap sm:items-center"
                 >
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => onCitationClick(citation)}
-                    className="max-w-full gap-1 truncate"
+                    className="w-full justify-between gap-1 sm:max-w-full sm:w-auto sm:justify-start"
                   >
-                    <span className="truncate text-xs">
+                    <span className="truncate text-left text-xs">
                       {citation.file_name} {citation.ref}
                     </span>
                     <ExternalLink className="h-3 w-3 shrink-0" />
@@ -64,7 +64,7 @@ export function AnswerCard({ response, onCitationClick }: AnswerCardProps) {
                         href={citation.url}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-white px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50"
+                        className="inline-flex w-full items-center justify-center gap-1 rounded-md border border-blue-200 bg-white px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50 sm:w-auto"
                       >
                         <ExternalLink className="h-3 w-3" />
                         {citation.ref_type === "video" ? "動画リンク" : "原文を開く"}
@@ -73,7 +73,7 @@ export function AnswerCard({ response, onCitationClick }: AnswerCardProps) {
                         href={toDownloadUrl(citation.url)}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100"
+                        className="inline-flex w-full items-center justify-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 sm:w-auto"
                       >
                         <Download className="h-3 w-3" />
                         ダウンロード
