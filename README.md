@@ -43,7 +43,7 @@
 - SQLAlchemy 2.x + Alembic
 - RQ + Redis
 - MinIO(S3互換)
-- LLM/Embedding: Gemini固定（`gemini-2.0-flash` / `gemini-embedding-001`）
+- LLM/Embedding: Gemini固定（`gemini-2.5-flash` / `gemini-embedding-001`）
 
 ## ディレクトリ
 - `app/`: API本体（routers/models/services）
@@ -106,7 +106,7 @@ docker compose --profile frontend up --build
 - `EMBEDDING_MODEL=gemini-embedding-001`
 - `EMBEDDING_DIM=1536`
 - `LLM_PROVIDER=gemini`
-- `LLM_MODEL=gemini-2.0-flash`
+- `LLM_MODEL=gemini-2.5-flash`
 - `GEMINI_API_KEY=<your_gemini_key>`
 
 反映:

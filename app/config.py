@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     embedding_dim: int = 1536
 
     llm_provider: Literal["gemini"] = "gemini"
-    llm_model: str = "gemini-2.0-flash"
+    llm_model: str = "gemini-2.5-flash"
     gemini_api_key: str | None = None
     gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta"
 
@@ -48,7 +48,7 @@ class Settings(BaseSettings):
     pdf_min_text_chars_per_page: int = 40
     image_only_pdf_ratio_threshold: float = 0.5
     pdf_ocr_enabled: bool = True
-    pdf_ocr_model: str = "gemini-2.0-flash"
+    pdf_ocr_model: str = "gemini-2.5-flash"
     pdf_ocr_max_pages_per_doc: int = 20
 
     @property
