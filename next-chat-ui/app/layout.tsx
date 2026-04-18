@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { AppProviders } from "@/app/providers";
+import { hasConfiguredLoginPassword } from "@/lib/auth-config";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -13,10 +14,12 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const loginRequired = hasConfiguredLoginPassword();
+
   return (
     <html lang="ja">
       <body className="font-sans">
-        <AppProviders>{children}</AppProviders>
+        <AppProviders loginRequired={loginRequired}>{children}</AppProviders>
       </body>
     </html>
   );

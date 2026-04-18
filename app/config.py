@@ -26,8 +26,8 @@ class Settings(BaseSettings):
     s3_presign_expire_sec: int = 3600
 
     embedding_provider: Literal["gemini"] = "gemini"
-    embedding_model: str = "embedding-001"
-    embedding_dim: int = 768
+    embedding_model: str = "gemini-embedding-001"
+    embedding_dim: int = 1536
 
     llm_provider: Literal["gemini"] = "gemini"
     llm_model: str = "gemini-2.0-flash"

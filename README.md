@@ -48,10 +48,21 @@
 ## ディレクトリ
 - `app/`: API本体（routers/models/services）
 - `worker/`: RQ worker + ingestion job
+- `next-chat-ui/`: Next.js製のフロントエンド
 - `alembic/`: DBマイグレーション
 - `docker-compose.yml`: ローカル一式起動
+- `docker-compose.prod.yml`: VPS向け本番構成
+- `deploy/Caddyfile`: HTTPS終端とフロント/MinIO公開用のCaddy設定
 
 ## 起動方法
+まず `.env` を作成します。
+
+```bash
+cp .env.example .env
+```
+
+その後、バックエンド一式を起動します。
+
 ```bash
 docker compose up --build
 ```
@@ -60,6 +71,23 @@ docker compose up --build
 - API: `http://localhost:8000`
 - MinIO API: `http://localhost:9000`
 - MinIO Console: `http://localhost:9001`
+
+フロントも Docker で起動する場合:
+```bash
+cp .env.example .env
+docker compose --profile frontend up --build
+```
+
+起動後:
+- フロント: `http://localhost:3000`
+- API: `http://localhost:8000`
+- MinIO API: `http://localhost:9000`
+- MinIO Console: `http://localhost:9001`
+
+補足:
+- `frontend` サービスは `Next.js` の開発サーバーを Docker 内で動かします。初回だけ `npm ci` が走るので少し待ちます。
+- 既定の `docker compose up --build` はこれまで通りバックエンド中心の起動です。フロントは `--profile frontend` を付けたときだけ起動します。
+- Google Drive取込を使う場合は、`secrets/google-drive-service-account.json` にサービスアカウントJSONを置いてください。`api` と `worker` はそのディレクトリを `/run/secrets` として参照します。
 
 ## 環境変数
 最小セット（`.env.example` 参照）:
@@ -76,6 +104,7 @@ docker compose up --build
 `.env` で以下を設定:
 - `EMBEDDING_PROVIDER=gemini`
 - `EMBEDDING_MODEL=gemini-embedding-001`
+- `EMBEDDING_DIM=1536`
 - `LLM_PROVIDER=gemini`
 - `LLM_MODEL=gemini-2.0-flash`
 - `GEMINI_API_KEY=<your_gemini_key>`
@@ -89,6 +118,34 @@ docker compose up -d --build api worker
 
 ### API認証
 `/api/*` は認証なしで利用できます（ローカル開発向け）。
+
+## VPSデプロイ
+フロントも含めてVPS 1台へ載せる場合は `docker-compose.prod.yml` を使ってください。構成は `Caddy + Next.js + FastAPI + Worker + PostgreSQL + Redis + MinIO` です。
+
+前提:
+- `APP_DOMAIN` と `FILES_DOMAIN` の 2つのDNS名をVPSへ向ける
+- VPSの `80/tcp`, `443/tcp` を開ける
+- Docker / Docker Compose が使える
+
+手順:
+1. `.env.vps.example` を `.env.vps` にコピーして値を埋める
+2. 最低でも `APP_DOMAIN`, `FILES_DOMAIN`, `LETSENCRYPT_EMAIL`, `GEMINI_API_KEY`, `CLINIC_PASSWORD`, `POSTGRES_PASSWORD`, `MINIO_ROOT_PASSWORD` を更新する
+3. `S3_PUBLIC_ENDPOINT` は必ず `https://<FILES_DOMAIN>` に合わせる
+4. 起動する
+
+```bash
+cp .env.vps.example .env.vps
+docker compose --env-file .env.vps -f docker-compose.prod.yml up -d --build
+```
+
+起動後:
+- フロント: `https://<APP_DOMAIN>`
+- MinIO公開URL: `https://<FILES_DOMAIN>`
+
+補足:
+- Caddyが自動でLet's Encrypt証明書を取得します。既存のNginxやApacheが `80/443` を掴んでいる場合は競合します。
+- 既存のリバースプロキシを使いたい場合、今回追加したCaddyは外して `frontend:3000` と `minio:9000` を既存プロキシへ繋ぐ代替案もあります。
+- Google Drive取込を使う場合は、VPS 上でも `secrets/google-drive-service-account.json` にサービスアカウントJSONを置いてください。`api` と `worker` が `/run/secrets/google-drive-service-account.json` として参照します。
 
 ## API
 - `GET /api/workspaces`

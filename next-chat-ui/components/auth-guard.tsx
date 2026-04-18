@@ -4,7 +4,13 @@ import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { isAuthenticated } from "@/lib/auth";
 
-export function AuthGuard({ children }: { children: React.ReactNode }) {
+export function AuthGuard({
+  children,
+  loginRequired
+}: {
+  children: React.ReactNode;
+  loginRequired: boolean;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const [authorized, setAuthorized] = useState(false);
@@ -12,6 +18,12 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     setHasMounted(true);
+
+    if (!loginRequired) {
+      setAuthorized(true);
+      return;
+    }
+
     const checkAuth = () => {
       const isAuth = isAuthenticated();
       const isLoginPage = pathname === "/login";
@@ -25,7 +37,9 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     };
 
     checkAuth();
-  }, [pathname, router]);
+  }, [loginRequired, pathname, router]);
+
+  if (!loginRequired) return <>{children}</>;
 
   // ログインページへのアクセスは常に許可
   if (pathname === "/login") return <>{children}</>;

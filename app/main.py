@@ -49,10 +49,22 @@ async def import_drive_shortcut(
     from app.services.queue import enqueue_drive_import
     from app.config import get_settings
     from fastapi import HTTPException
+    from pathlib import Path
     
     db = SessionLocal()
     settings = get_settings()
     try:
+        if not settings.google_drive_service_account_path:
+            raise HTTPException(
+                status_code=503,
+                detail="Google Drive service account path is not configured on the server",
+            )
+        if not Path(settings.google_drive_service_account_path).is_file():
+            raise HTTPException(
+                status_code=503,
+                detail="Google Drive service account file is not available on the server",
+            )
+
         # 最初のワークスペースを使用
         workspace = db.query(Workspace).first()
         if not workspace:

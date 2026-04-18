@@ -1,0 +1,13 @@
+{
+	email {$LETSENCRYPT_EMAIL}
+}
+
+{$APP_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy frontend:3000
+}
+
+{$FILES_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy minio:9000
+}

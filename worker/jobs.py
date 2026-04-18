@@ -51,8 +51,13 @@ def process_document_ingestion(
             # Google Driveからダウンロード
             settings = get_settings()
             sa_path = settings.google_drive_service_account_path
-            with open(sa_path, "r") as f:
-                sa_info = json.load(f)
+            if not sa_path:
+                raise IngestionError("Google Drive service account path is not configured")
+            try:
+                with open(sa_path, "r", encoding="utf-8") as f:
+                    sa_info = json.load(f)
+            except OSError as exc:
+                raise IngestionError(f"Google Drive service account could not be read: {exc}") from exc
             drive = DriveService(sa_info)
             file_id = document.storage_key.replace("drive://", "")
             raw_bytes = drive.download_file_to_memory(file_id)

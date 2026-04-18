@@ -1,11 +1,17 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
-import { AUTH_COOKIE_NAME, AUTH_COOKIE_VALUE } from "@/lib/auth";
+import { hasConfiguredLoginPassword } from "@/lib/auth-config";
+import { AUTH_COOKIE_NAME, AUTH_COOKIE_VALUE } from "@/lib/auth-constants";
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const loginRequired = hasConfiguredLoginPassword();
   const isAuthenticated = request.cookies.get(AUTH_COOKIE_NAME)?.value === AUTH_COOKIE_VALUE;
+
+  if (!loginRequired) {
+    return NextResponse.next();
+  }
 
   if (pathname === "/login") {
     const response = NextResponse.next();

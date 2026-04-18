@@ -1,13 +1,15 @@
 import { NextResponse } from "next/server";
 
-import {
-  AUTH_COOKIE_NAME,
-  AUTH_COOKIE_VALUE,
-  hasConfiguredLoginPassword,
-  verifyLoginPassword
-} from "@/lib/auth";
+import { AUTH_COOKIE_NAME, AUTH_COOKIE_VALUE } from "@/lib/auth-constants";
+import { hasConfiguredLoginPassword, verifyLoginPassword } from "@/lib/auth-server";
+
+export const runtime = "nodejs";
 
 export async function POST(request: Request) {
+  if (!hasConfiguredLoginPassword()) {
+    return NextResponse.json({ ok: true, loginRequired: false });
+  }
+
   const payload = await request.json().catch(() => ({}));
   const password = typeof payload?.password === "string" ? payload.password : "";
 

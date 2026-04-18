@@ -1,0 +1,126 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg15
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-rag}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: ["/app/scripts/start-api.sh"]
+    env_file:
+      - .env.vps
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-rag}
+      REDIS_URL: redis://redis:6379/0
+      S3_ENDPOINT: http://minio:9000
+      S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT}
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      S3_BUCKET: ${S3_BUCKET:-rag-documents}
+      CORS_ORIGINS: ${CORS_ORIGINS}
+      CLINIC_PASSWORD: ${CLINIC_PASSWORD}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GOOGLE_DRIVE_SERVICE_ACCOUNT_PATH: ${GOOGLE_DRIVE_SERVICE_ACCOUNT_PATH:-}
+    depends_on:
+      - postgres
+      - minio
+      - redis
+    volumes:
+      - ./secrets:/run/secrets:ro
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: ["/app/scripts/start-worker.sh"]
+    env_file:
+      - .env.vps
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-rag}
+      REDIS_URL: redis://redis:6379/0
+      S3_ENDPOINT: http://minio:9000
+      S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT}
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      S3_BUCKET: ${S3_BUCKET:-rag-documents}
+      CLINIC_PASSWORD: ${CLINIC_PASSWORD}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GOOGLE_DRIVE_SERVICE_ACCOUNT_PATH: ${GOOGLE_DRIVE_SERVICE_ACCOUNT_PATH:-}
+    depends_on:
+      - postgres
+      - minio
+      - redis
+    volumes:
+      - ./secrets:/run/secrets:ro
+
+  frontend:
+    build:
+      context: ./next-chat-ui
+      dockerfile: Dockerfile
+      args:
+        CLINIC_PASSWORD: ${CLINIC_PASSWORD:-}
+        LOGIN_PASSWORD: ${LOGIN_PASSWORD:-}
+    restart: unless-stopped
+    env_file:
+      - .env.vps
+    environment:
+      NODE_ENV: production
+      API_PROXY_TARGET: http://api:8000
+      CLINIC_PASSWORD: ${CLINIC_PASSWORD}
+      FACILITIES_CSV_PATH: /app/data/facilities_sample.csv
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+    depends_on:
+      - api
+    volumes:
+      - ./data:/app/data:ro
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - frontend
+      - minio
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN}
+      FILES_DOMAIN: ${FILES_DOMAIN}
+      LETSENCRYPT_EMAIL: ${LETSENCRYPT_EMAIL}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  postgres_data:
+  minio_data:
+  redis_data:
+  caddy_data:
+  caddy_config:

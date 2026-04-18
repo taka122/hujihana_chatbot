@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 export type Facility = {
@@ -53,7 +53,17 @@ export function loadFacilities(): Facility[] {
     return facilityCache;
   }
 
-  const csvPath = path.resolve(process.cwd(), "..", "data", "facilities_sample.csv");
+  const csvPath =
+    process.env.FACILITIES_CSV_PATH?.trim() ||
+    [
+      path.resolve(process.cwd(), "data", "facilities_sample.csv"),
+      path.resolve(process.cwd(), "..", "data", "facilities_sample.csv")
+    ].find((candidate) => existsSync(candidate));
+
+  if (!csvPath) {
+    throw new Error("施設データCSVが見つかりません。FACILITIES_CSV_PATH を確認してください。");
+  }
+
   const raw = readFileSync(csvPath, "utf-8");
   const lines = raw
     .split(/\r?\n/)
@@ -109,4 +119,3 @@ export function loadFacilities(): Facility[] {
   facilityCache = facilities;
   return facilities;
 }
-

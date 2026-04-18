@@ -7,7 +7,13 @@ import { AuthGuard } from "@/components/auth-guard";
 import { ApiKeySettingsFab } from "@/components/api-key-settings-fab";
 import { Toaster } from "@/components/ui/toaster";
 
-export function AppProviders({ children }: { children: React.ReactNode }) {
+export function AppProviders({
+  children,
+  loginRequired
+}: {
+  children: React.ReactNode;
+  loginRequired: boolean;
+}) {
   const [queryClient] = useState(
     () =>
       new QueryClient({
@@ -22,7 +28,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthGuard>
+      <AuthGuard loginRequired={loginRequired}>
         {children}
         <ApiKeySettingsFab />
         <Toaster />

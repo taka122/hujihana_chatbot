@@ -2,6 +2,12 @@ __pycache__/
 *.pyc
 .pytest_cache/
 output/
+.playwright-cli/
+worker.log
+worker_logs*.txt
 .env
 .env.*
+!.env.example
+!.env.vps.example
 service-account.json
+secrets/*.json
