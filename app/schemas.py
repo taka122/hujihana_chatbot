@@ -95,6 +95,19 @@ class ChatCitation(BaseModel):
     chunk_id: uuid.UUID
 
 
+class ChatClarificationPayload(BaseModel):
+    """曖昧クエリに対する聞き返しメッセージ。
+
+    needed=True の時、フロントエンドは answer の代わりに question + options を表示する。
+    options はクリックで自動再質問できるボタン候補。
+    """
+
+    needed: bool = False
+    question: str = ""
+    options: list[str] = Field(default_factory=list)
+
+
 class ChatQueryResponse(BaseModel):
     answer: ChatAnswerPayload
     citations: list[ChatCitation]
+    clarification: ChatClarificationPayload | None = None

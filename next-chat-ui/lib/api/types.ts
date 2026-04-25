@@ -41,9 +41,16 @@ export type ChatAnswer = {
   next_actions: string[];
 };
 
+export type ChatClarification = {
+  needed: boolean;
+  question: string;
+  options: string[];
+};
+
 export type ChatResponse = {
   answer: ChatAnswer;
   citations: Citation[];
+  clarification?: ChatClarification | null;
 };
 
 export type ChatRequest = {

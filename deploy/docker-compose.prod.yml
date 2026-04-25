@@ -1,0 +1,146 @@
+# Production docker-compose for ConoHa VPS (1GB RAM / 2 vCPU)
+#
+# Differences from the local docker-compose.yml:
+#  - All services have `restart: unless-stopped`
+#  - The DB / Redis / MinIO ports are bound to 127.0.0.1 only (not exposed to the public Internet)
+#  - Soft memory limits to keep the box from OOM-killing
+#  - The Next.js frontend (next-chat-ui) is built and served as another service
+#  - The frontend talks to the API over the internal docker network (http://api:8000)
+#
+# Run from the project root with:
+#   docker compose -f docker-compose.yml -f deploy/docker-compose.prod.yml --env-file .env up -d --build
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg15
+    container_name: rag-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: rag
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    ports: !override
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  redis:
+    image: redis:7-alpine
+    container_name: rag-redis
+    restart: unless-stopped
+    ports: !override
+      - "127.0.0.1:6379:6379"
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+
+  minio:
+    image: minio/minio:latest
+    container_name: rag-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    command: server /data --console-address ":9001"
+    ports: !override
+      # Console only on localhost; tunnel via SSH if you need it.
+      - "0.0.0.0:9000:9000"
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - minio_data:/data
+    deploy:
+      resources:
+        limits:
+          memory: 192M
+
+  api:
+    build: .
+    container_name: rag-api
+    restart: unless-stopped
+    command: ["/app/scripts/start-api.sh"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/rag
+      REDIS_URL: redis://redis:6379/0
+      S3_ENDPOINT: http://minio:9000
+      S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT}
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      S3_BUCKET: rag-documents
+      EMBEDDING_PROVIDER: gemini
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-gemini-embedding-001}
+      LLM_PROVIDER: gemini
+      LLM_MODEL: ${LLM_MODEL:-gemini-2.0-flash}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GEMINI_BASE_URL: ${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1beta}
+      CORS_ORIGINS: ${CORS_ORIGINS}
+    depends_on:
+      - postgres
+      - redis
+      - minio
+    ports: !override
+      - "8000:8000"
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+
+  worker:
+    build: .
+    container_name: rag-worker
+    restart: unless-stopped
+    command: ["/app/scripts/start-worker.sh"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/rag
+      REDIS_URL: redis://redis:6379/0
+      S3_ENDPOINT: http://minio:9000
+      S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT}
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      S3_BUCKET: rag-documents
+      EMBEDDING_PROVIDER: gemini
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-gemini-embedding-001}
+      LLM_PROVIDER: gemini
+      LLM_MODEL: ${LLM_MODEL:-gemini-2.0-flash}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GEMINI_BASE_URL: ${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1beta}
+    depends_on:
+      - postgres
+      - redis
+      - minio
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+
+  frontend:
+    build:
+      context: ./next-chat-ui
+      dockerfile: Dockerfile
+    container_name: rag-frontend
+    restart: unless-stopped
+    environment:
+      # Server-side proxy target inside the docker network
+      API_PROXY_TARGET: http://api:8000
+      # If the browser ever needs to know it directly (it doesn't here, but kept for clarity)
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-/api/backend}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      NODE_ENV: production
+      PORT: "3000"
+      HOSTNAME: 0.0.0.0
+    depends_on:
+      - api
+    ports: !override
+      - "3000:3000"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+volumes:
+  postgres_data:
+  minio_data:

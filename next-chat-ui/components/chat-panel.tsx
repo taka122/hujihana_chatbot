@@ -4,6 +4,7 @@ import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "
 import { Loader2, SendHorizontal } from "lucide-react";
 
 import { AnswerCard } from "@/components/answer-card";
+import { ClarificationCard } from "@/components/clarification-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -155,7 +156,19 @@ export function ChatPanel({ workspaceId, onCitationClick }: ChatPanelProps) {
                 </div>
               )}
 
-              {turn.response && <AnswerCard response={turn.response} onCitationClick={onCitationClick} />}
+              {turn.response?.clarification?.needed ? (
+                <ClarificationCard
+                  clarification={turn.response.clarification}
+                  disabled={chat.isPending}
+                  onSelect={(option) => {
+                    void sendQuery(option);
+                  }}
+                />
+              ) : (
+                turn.response && (
+                  <AnswerCard response={turn.response} onCitationClick={onCitationClick} />
+                )
+              )}
             </div>
           ))}
         </div>

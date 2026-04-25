@@ -181,6 +181,19 @@ function normalizeChatResponse(raw: unknown): ChatResponse {
     })
     .filter((value): value is NonNullable<typeof value> => value !== null);
 
+  const clarificationRaw = asRecord(payload?.clarification);
+  const clarification = clarificationRaw
+    ? {
+        needed: Boolean(clarificationRaw.needed),
+        question: String(clarificationRaw.question ?? ""),
+        options: Array.isArray(clarificationRaw.options)
+          ? clarificationRaw.options
+              .map((value) => String(value).trim())
+              .filter((value) => value.length > 0)
+          : []
+      }
+    : null;
+
   return {
     answer: {
       conclusion: String(answer?.conclusion ?? ""),
@@ -190,7 +203,8 @@ function normalizeChatResponse(raw: unknown): ChatResponse {
         ? answer.next_actions.map((value) => String(value))
         : []
     },
-    citations: normalizedCitations
+    citations: normalizedCitations,
+    clarification: clarification && clarification.needed ? clarification : null
   };
 }
 

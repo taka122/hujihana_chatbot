@@ -10,8 +10,9 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.db import get_db
 from app.models import Chunk, Workspace
-from app.schemas import ChatQueryRequest, ChatQueryResponse
+from app.schemas import ChatClarificationPayload, ChatQueryRequest, ChatQueryResponse
 from app.services.answer import AnswerService
+from app.services.clarification import ClarificationService
 from app.services.embed import EmbeddingService
 from app.services.retrieve import hybrid_retrieve
 
@@ -43,6 +44,41 @@ def query_chat(
             final_k=settings.answer_context_chunks,
         )
 
+        # 曖昧判定：複数業務領域にまたがるクエリは聞き返しに切り替える
+        clarification_payload: ChatClarificationPayload | None = None
+        if retrieved:
+            try:
+                clarification_service = ClarificationService(gemini_api_key=gemini_api_key)
+                clarification = clarification_service.evaluate(
+                    query=payload.query,
+                    contexts=retrieved,
+                )
+            except Exception:  # noqa: BLE001
+                # 候補生成失敗時は通常回答にフォールバック
+                logger.exception("Clarification evaluation failed; proceeding with normal answer")
+                clarification = None
+            else:
+                if clarification.needed:
+                    clarification_payload = ChatClarificationPayload(
+                        needed=True,
+                        question=clarification.question,
+                        options=clarification.options,
+                    )
+
+        if clarification_payload is not None:
+            # 聞き返し時は回答本文を空にして、フロント側でclarificationを表示
+            placeholder_answer = {
+                "conclusion": clarification_payload.question,
+                "details": "",
+                "notes": "",
+                "next_actions": [],
+            }
+            return ChatQueryResponse(
+                answer=placeholder_answer,
+                citations=[],
+                clarification=clarification_payload,
+            )
+
         answer_service = AnswerService(gemini_api_key=gemini_api_key)
         result = answer_service.answer(
             query=payload.query,
@@ -63,7 +99,11 @@ def query_chat(
             if not result.citations:
                 result = answer_service.not_found()
 
-        return ChatQueryResponse(answer=result.answer, citations=result.citations)
+        return ChatQueryResponse(
+            answer=result.answer,
+            citations=result.citations,
+            clarification=None,
+        )
     except Exception as exc:  # noqa: BLE001
         logger.exception("Chat query failed")
         fallback = {
@@ -77,6 +117,7 @@ def query_chat(
                 ],
             },
             "citations": [],
+            "clarification": None,
         }
         return ChatQueryResponse(**fallback)
 
