@@ -11,6 +11,7 @@ import { toDownloadUrl } from "@/lib/utils";
 type AnswerCardProps = {
   response: ChatResponse;
   onCitationClick: (citation: Citation) => void;
+  onActionClick?: (action: string) => void;
 };
 
 const NOT_FOUND_HINTS = ["見つからない", "不明", "情報不足", "根拠なし", "not found"];
@@ -23,7 +24,7 @@ function isNoEvidence(response: ChatResponse): boolean {
   return NOT_FOUND_HINTS.some((hint) => text.includes(hint));
 }
 
-export function AnswerCard({ response, onCitationClick }: AnswerCardProps) {
+export function AnswerCard({ response, onCitationClick, onActionClick }: AnswerCardProps) {
   const noEvidence = isNoEvidence(response);
 
   return (
@@ -95,13 +96,21 @@ export function AnswerCard({ response, onCitationClick }: AnswerCardProps) {
         </section>
 
         {response.answer.next_actions.length > 0 && (
-          <section className="space-y-1">
-            <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">次アクション</h4>
-            <ul className="list-disc space-y-1 pl-5 text-sm text-slate-700">
+          <section className="space-y-2 pt-2 border-t border-slate-100">
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">おすすめの質問・アクション</h4>
+            <div className="flex flex-wrap gap-2">
               {response.answer.next_actions.map((action, index) => (
-                <li key={`${action}-${index}`}>{action}</li>
+                <Button
+                  key={`${action}-${index}`}
+                  variant="outline"
+                  size="sm"
+                  className="rounded-full text-xs font-normal text-blue-700 hover:bg-blue-50 border-blue-200"
+                  onClick={() => onActionClick?.(action)}
+                >
+                  {action}
+                </Button>
               ))}
-            </ul>
+            </div>
           </section>
         )}
 
