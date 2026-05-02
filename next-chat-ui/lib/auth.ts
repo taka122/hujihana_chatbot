@@ -1,4 +1,3 @@
-"use client";
 
 const CLINIC_KEY_STORAGE = "hujihana_clinic_key";
 
@@ -41,4 +40,18 @@ export function clearClinicKey() {
 
 export function isAuthenticated(): boolean {
   return !!getClinicKey();
+}
+
+export const AUTH_COOKIE_NAME = "hujihana_auth_session";
+export const AUTH_COOKIE_VALUE = "authenticated";
+
+export function hasConfiguredLoginPassword(): boolean {
+  return !!process.env.CLINIC_PASSWORD;
+}
+
+export function verifyLoginPassword(password: string): boolean {
+  if (!hasConfiguredLoginPassword()) {
+    return true; // パスワードが設定されていない場合は認証フリーとする
+  }
+  return password === process.env.CLINIC_PASSWORD;
 }

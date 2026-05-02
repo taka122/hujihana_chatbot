@@ -158,7 +158,7 @@ export function ChatPanel({ workspaceId, onCitationClick }: ChatPanelProps) {
                 </div>
               )}
 
-              {turn.response && <AnswerCard response={turn.response} onCitationClick={onCitationClick} />}
+              {turn.response && <AnswerCard response={turn.response} onCitationClick={onCitationClick} onActionClick={(action) => { void sendQuery(action); }} />}
             </div>
           ))}
         </div>
